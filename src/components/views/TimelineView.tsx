@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Clock, Calendar, MapPin, User, ChevronRight, Landmark, ArrowUp, ArrowDown, GitFork } from 'lucide-react';
 import { GenealogyData, LifeEvent } from '../../types/genealogy';
-import { TimelineScope, getLineageDepths, relationLabel } from '../../lib/timeline-scope';
+import { TimelineScope, getLineageDepths, relationLabel, ageAtDeath } from '../../lib/timeline-scope';
 
 interface TimelineViewProps {
   data: GenealogyData;
@@ -22,6 +22,8 @@ interface TimelineEvent {
   description: string;
   /** Lien de parenté avec la personne de départ */
   relation?: string;
+  /** Âge au décès, quand il peut être établi */
+  age?: string;
 }
 
 const HISTORICAL_CONTEXT: Array<{ year: number; title: string; desc: string }> = [
@@ -78,6 +80,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
         place: ind.death.place,
         description: `Décès de ${ind.name}`,
         relation: relationOf(ind.id),
+        age: ageAtDeath(ind),
       });
     }
   }
@@ -249,6 +252,9 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
 
                 <h3 className="font-serif text-sm font-bold text-stone-900 mt-1">
                   {event.description}
+                  {event.age && (
+                    <span className="font-sans font-semibold text-rose-800"> · {event.age}</span>
+                  )}
                 </h3>
 
                 {event.relation && (

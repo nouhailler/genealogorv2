@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { parseGedcom } from '../gedcom-parser';
-import { getLineageDepths, relationLabel } from '../timeline-scope';
+import { parseGedcom, parseGedcomDate } from '../gedcom-parser';
+import { getLineageDepths, relationLabel, ageAtDeath } from '../timeline-scope';
+import { Individual } from '../../types/genealogy';
+
+const lived = (birth?: string, death?: string): Individual => ({
+  id: '@X@', name: 'X', sex: 'M', familiesAsChild: [], familiesAsSpouse: [],
+  birth: birth ? { date: birth, parsedDate: parseGedcomDate(birth) } : undefined,
+  death: death ? { date: death, parsedDate: parseGedcomDate(death) } : undefined,
+});
 
 // Jean (@I4@) → Henri (@I2@) + Marie (@I3@) → Gabrielle (@I1@) → Patrick (@I5@)
 const GED = `0 HEAD
@@ -70,5 +77,27 @@ describe('Chronologie depuis une fiche (ascendants / descendants)', () => {
     expect(relationLabel(-2, 'M')).toBe('Petit-fils');
     expect(relationLabel(-3, 'X')).toBe('Arrière-petit-enfant');
     expect(relationLabel(-4, 'M')).toBe('Descendant · 4e génération');
+  });
+
+  it('calcule l\'âge exact au décès quand les dates sont complètes', () => {
+    expect(ageAtDeath(lived('16 NOV 1905', '19 OCT 1982'))).toBe('à 76 ans');
+    expect(ageAtDeath(lived('16 NOV 1905', '16 NOV 1982'))).toBe('à 77 ans');
+    expect(ageAtDeath(lived('10 JAN 1890', '25 APR 1890'))).toBe('à 3 mois');
+    expect(ageAtDeath(lived('10 JAN 1890', '22 JAN 1890'))).toBe('à 12 jours');
+    expect(ageAtDeath(lived('10 JAN 1890', '10 JAN 1890'))).toBe('le jour de sa naissance');
+  });
+
+  it('donne un âge approché avec les années seules ou une date approximative', () => {
+    expect(ageAtDeath(lived('1905', '1982'))).toBe('vers 77 ans');
+    expect(ageAtDeath(lived('ABT 1780', '12 MAR 1850'))).toBe('vers 70 ans');
+    expect(ageAtDeath(lived('1890', '1890'))).toBe('avant 1 an');
+  });
+
+  it('n\'affiche rien si l\'âge ne peut pas être établi', () => {
+    expect(ageAtDeath(lived('16 NOV 1905'))).toBeUndefined();
+    expect(ageAtDeath(lived(undefined, '1982'))).toBeUndefined();
+    expect(ageAtDeath(lived('BEF 1800', '1850'))).toBeUndefined();
+    expect(ageAtDeath(lived('1905', 'BET 1980 AND 1985'))).toBeUndefined();
+    expect(ageAtDeath(lived('1950', '1900'))).toBeUndefined();
   });
 });

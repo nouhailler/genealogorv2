@@ -3,6 +3,13 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.14.1] — 2026-10-25
+
+### ⏳ Ajouté — Âge au décès dans la chronologie
+- Chaque décès affiche l'âge de la personne quand il peut être établi : âge exact avec des dates complètes (« à 76 ans », « à 3 mois », « à 12 jours »), âge approché avec les années seules ou une date approximative (« vers 77 ans »).
+- Rien n'est affiché si une date manque, est bornée (avant, après, entre) ou incohérente.
+- `ageAtDeath` (timeline-scope.ts) et 3 nouveaux tests — 196 tests au total.
+
 ## [2.14.0] — 2026-10-25
 
 ### 🕰️ Ajouté — Chronologie depuis une fiche (ascendants / descendants)

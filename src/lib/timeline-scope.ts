@@ -3,7 +3,7 @@
  * et ses descendants, avec la distance en générations de chacun (pour libeller le lien de parenté).
  */
 
-import { GenealogyData, Sex } from '../types/genealogy';
+import { GenealogyData, Individual, Sex } from '../types/genealogy';
 
 export type TimelineScope = 'ascendants' | 'descendants' | 'all';
 
@@ -67,4 +67,37 @@ export function relationLabel(depth: number, sex: Sex): string {
   if (n === 2) return m ? 'Petit-fils' : f ? 'Petite-fille' : 'Petit-enfant';
   if (n === 3) return m ? 'Arrière-petit-fils' : f ? 'Arrière-petite-fille' : 'Arrière-petit-enfant';
   return `Descendant · ${n}e génération`;
+}
+
+/**
+ * Âge au décès, uniquement s'il peut être établi :
+ *  - dates complètes : âge exact (« à 76 ans », « à 3 mois », « à 12 jours ») ;
+ *  - années seules ou date approximative : « vers 77 ans » (l'âge exact est connu à un an près) ;
+ *  - date bornée (avant, après, entre), manquante ou incohérente : rien.
+ */
+export function ageAtDeath(person: Individual): string | undefined {
+  const b = person.birth?.parsedDate;
+  const d = person.death?.parsedDate;
+  if (!b?.year || !d?.year) return undefined;
+  if ([b, d].some(p => p.isBefore || p.isAfter || p.isBetween)) return undefined;
+
+  const approximate = b.isApproximate || d.isApproximate;
+  if (!approximate && b.month && b.day && d.month && d.day) {
+    let years = d.year - b.year;
+    if (d.month < b.month || (d.month === b.month && d.day < b.day)) years--;
+    if (years < 0 || years > 125) return undefined;
+    if (years >= 1) return `à ${years} an${years > 1 ? 's' : ''}`;
+
+    const days = Math.round((Date.UTC(d.year, d.month - 1, d.day) - Date.UTC(b.year, b.month - 1, b.day)) / 86_400_000);
+    if (days < 0) return undefined;
+    const months = (d.year - b.year) * 12 + (d.month - b.month) - (d.day < b.day ? 1 : 0);
+    if (months >= 1) return `à ${months} mois`;
+    if (days === 0) return 'le jour de sa naissance';
+    return `à ${days} jour${days > 1 ? 's' : ''}`;
+  }
+
+  const years = d.year - b.year;
+  if (years < 0 || years > 125) return undefined;
+  if (years === 0) return approximate ? undefined : 'avant 1 an';
+  return `vers ${years} ans`;
 }
