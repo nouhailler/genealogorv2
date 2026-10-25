@@ -3,6 +3,15 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.11.0] — 2026-10-25
+
+### 🔔 Ajouté — Alertes de modification de l'arbre
+- **Journal des modifications** (`change-log.ts`) déduit de la comparaison des versions successives de l'arbre : fiche ajoutée / modifiée (avec les rubriques : naissance, décès, profession…) / supprimée, union modifiée, archive ajoutée / modifiée / supprimée, personne identifiée sur une photo. Import massif regroupé en une alerte de synthèse. Comparaison insensible à l'ordre des clés et aux champs techniques (pas de fausses alertes après une relecture Firestore).
+- **Diffusion à tous les utilisateurs** : le journal (100 derniers événements) est inclus dans la copie chiffrée de chaque lien de partage, filtré selon la branche et anonymisé comme l'arbre ; les destinataires le reçoivent en direct.
+- **Bandeau d'alertes** (`ChangeAlertBanner.tsx`) épinglé sous la barre de navigation : nombre de modifications non lues, dernière alerte, liste dépliable, « Tout marquer comme lu ». Un clic ouvre directement la fiche ou l'archive concernée.
+- Suivi lu / non lu par arbre et par lien ; à la première ouverture d'un lien, l'historique antérieur n'est pas signalé comme nouveau ; pas d'alerte pour ses propres modifications.
+- 12 nouveaux tests (`change-log.test.ts`) — 189 tests au total.
+
 ## [2.10.0] — 2026-10-25
 
 ### 🔗 Corrigé — Les liens de partage affichaient un arbre vide

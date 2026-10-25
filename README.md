@@ -255,6 +255,10 @@ Le routage monopage (retour à `index.html` pour toute URL, ex. `/?room=famille-
    - **sans mot de passe** : `https://…/?share=<jeton>#k=<clé>` — la clé est dans le fragment `#`, jamais envoyé à un serveur ;
    - **avec mot de passe** : `https://…/?share=<jeton>` — la clé est déchiffrée avec le mot de passe saisi.
 
+#### Alertes de modification
+
+Chaque ajout, modification ou suppression de fiche, modification d'union, ajout ou modification d'archive et chaque personne identifiée sur une photo est consigné dans un journal (100 derniers événements, `change-log.ts`). Ce journal accompagne la copie partagée : les personnes qui consultent un lien voient un **bandeau d'alertes** épinglé sous la barre de navigation, mis à jour en direct, avec le nombre de modifications non lues. Un clic sur une alerte ouvre directement la fiche ou l'archive concernée ; « Tout marquer comme lu » vide le bandeau. Un import GEDCOM ou une restauration produit une seule alerte de synthèse. Les alertes respectent la branche partagée et l'anonymisation des vivants ; le créateur ne reçoit pas d'alerte pour ses propres modifications.
+
 Les images des archives ne sont pas incluses dans la copie partagée (limite de 1 Mo par document Firestore ; un arbre de ~500 personnes occupe environ 60 Ko).
 
 #### Déployer les règles Firestore (obligatoire une fois)

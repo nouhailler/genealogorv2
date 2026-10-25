@@ -197,6 +197,8 @@ export function getTreeStorageKeys(treeId: string): string[] {
     `${STORAGE_KEYS.ARCHIVES}_${treeId}`,
     `${STORAGE_KEYS.ACCESS}_${treeId}`,
     `genealogor_created_${treeId}`,
+    `genealogor_changes_v1_${treeId}`,
+    `genealogor_alerts_${treeId}`,
     // Anciennes clés (versions antérieures à la partition v2)
     `genealogor_tree_${treeId}`,
     `genealogor_archives_${treeId}`,

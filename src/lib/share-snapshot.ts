@@ -13,6 +13,7 @@ import { ArchiveDocument, BranchAccess, GenealogyData } from '../types/genealogy
 import { filterGenealogyData } from './branch-filter';
 import { getProtectedPersonIds, sanitizeArchivesForPrivacy } from './privacy';
 import { decryptData, encryptData } from './crypto';
+import { ChangeEvent, filterChangesForShare } from './change-log';
 
 export const SHARE_FORMAT_VERSION = 1;
 /** Marge sous la limite de 1 Mio d'un document Firestore */
@@ -26,6 +27,8 @@ export interface ShareSnapshot {
   generatedAt: string;
   tree: GenealogyData;
   archives: ArchiveDocument[];
+  /** Journal des modifications visibles par ce lien (alertes) */
+  changes?: ChangeEvent[];
 }
 
 /** Document Firestore `/shares/{jeton}` */
@@ -68,7 +71,8 @@ export function isFirestoreShare(access: BranchAccess): boolean {
 export function buildShareSnapshot(
   data: GenealogyData,
   archives: ArchiveDocument[],
-  access: BranchAccess
+  access: BranchAccess,
+  changeLog: ChangeEvent[] = []
 ): ShareSnapshot {
   const rootId = access.rootPersonId && data.individuals[access.rootPersonId]
     ? access.rootPersonId
@@ -86,6 +90,7 @@ export function buildShareSnapshot(
     visibleArchives = sanitizeArchivesForPrivacy(visibleArchives, getProtectedPersonIds(data));
   }
 
+  const sharedArchives = visibleArchives.map(({ fileData, ...rest }) => rest);
   return {
     version: SHARE_FORMAT_VERSION,
     title: data.sourceHeader || 'Arbre généalogique',
@@ -93,7 +98,8 @@ export function buildShareSnapshot(
     shareName: access.name,
     generatedAt: new Date().toISOString(),
     tree: { ...tree, rootPersonId: tree.individuals[rootId] ? rootId : tree.rootPersonId },
-    archives: visibleArchives.map(({ fileData, ...rest }) => rest),
+    archives: sharedArchives,
+    changes: filterChangesForShare(changeLog, tree, sharedArchives, access.hideLiving),
   };
 }
 
@@ -142,27 +148,6 @@ export function wrapShareKey(shareKey: string, password: string): Promise<string
 
 export function unwrapShareKey(wrappedKey: string, password: string): Promise<string> {
   return decryptData(wrappedKey, password);
-}
-
-/** Construit le document Firestore pour un lien donné */
-export async function buildShareDocument(
-  data: GenealogyData,
-  archives: ArchiveDocument[],
-  access: BranchAccess,
-  treeId: string,
-  ownerId: string
-): Promise<ShareDocument> {
-  if (!access.shareKey) throw new Error('Lien sans clé de partage');
-  const payload = await sealSnapshot(buildShareSnapshot(data, archives, access), access.shareKey);
-  return {
-    version: SHARE_FORMAT_VERSION,
-    treeId,
-    ownerId,
-    hasPassword: Boolean(access.wrappedKey),
-    ...(access.wrappedKey ? { wrappedKey: access.wrappedKey } : {}),
-    payload,
-    updatedAt: new Date().toISOString(),
-  };
 }
 
 /** URL à envoyer : la clé n'est incluse (dans le fragment) que pour un lien sans mot de passe */

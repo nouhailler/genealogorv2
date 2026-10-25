@@ -18,6 +18,18 @@ import { ContextualGuide } from './components/ContextualGuide';
 import { TreeManagerModal } from './components/TreeManagerModal';
 import { FirstTimeTreeWizard } from './components/FirstTimeTreeWizard';
 import { SharedLinkStatus } from './components/SharedLinkStatus';
+import { ChangeAlertBanner } from './components/ChangeAlertBanner';
+import {
+  ChangeEvent,
+  TreeState,
+  diffTreeStates,
+  appendChanges,
+  loadAlertState,
+  saveAlertState,
+  getUnreadChanges,
+  allReadState,
+  AlertReadState,
+} from './lib/change-log';
 import {
   readShareParams,
   buildShareSnapshot,
@@ -316,6 +328,72 @@ export default function App() {
 
   // Chronological anomalies detection
   const anomalies = useMemo(() => validateChronology(data), [data]);
+
+  // ── Journal des modifications & alertes ──────────────────────────────────────
+  // Créateur : le journal est déduit des changements successifs de l'arbre et conservé par arbre.
+  // Destinataire d'un lien : le journal arrive avec l'instantané partagé, mis à jour en direct.
+  const changeLogKey = (id: string) => `genealogor_changes_v1_${id}`;
+  const [changeLog, setChangeLog] = useState<ChangeEvent[]>(() =>
+    isSharedView ? [] : getVersionedItem<ChangeEvent[]>(changeLogKey(roomId), []).data
+  );
+  const alertScope = isSharedView ? `share-${SHARE_PARAMS!.token}` : roomId;
+  const [alertState, setAlertState] = useState<AlertReadState | null>(() => loadAlertState(alertScope));
+  const [archiveFocusNonce, setArchiveFocusNonce] = useState(0);
+  const baselineRef = React.useRef<{ roomId: string; state: TreeState } | null>(null);
+
+  useEffect(() => {
+    if (isSharedView) return;
+    setChangeLog(getVersionedItem<ChangeEvent[]>(changeLogKey(roomId), []).data);
+    setAlertState(loadAlertState(roomId));
+  }, [roomId]);
+
+  useEffect(() => {
+    if (isSharedView) return;
+    const current: TreeState = { data, archives };
+    const baseline = baselineRef.current;
+    baselineRef.current = { roomId, state: current };
+    // Premier rendu ou changement d'arbre : nouvelle référence, pas d'alerte
+    if (!baseline || baseline.roomId !== roomId) return;
+    const events = diffTreeStates(baseline.state, current);
+    if (events.length === 0) return;
+    setChangeLog(prev => {
+      const next = appendChanges(prev, events);
+      setVersionedItem(changeLogKey(roomId), next);
+      return next;
+    });
+    // Ses propres modifications ne déclenchent pas d'alerte sur cet appareil
+    setAlertState(prev => {
+      const next = allReadState(events, prev);
+      saveAlertState(roomId, next);
+      return next;
+    });
+  }, [data, archives, roomId]);
+
+  const unreadChanges = useMemo(() => getUnreadChanges(changeLog, alertState), [changeLog, alertState]);
+
+  const handleOpenChange = (change: ChangeEvent) => {
+    setAlertState(prev => {
+      const base = prev || { lastSeenAt: 0, readIds: [] };
+      const next = { ...base, readIds: [...base.readIds, change.id].slice(-200) };
+      saveAlertState(alertScope, next);
+      return next;
+    });
+    if (change.targetType === 'person') {
+      setSelectedPersonId(change.targetId);
+      setActiveTab('profile');
+    } else {
+      setSelectedArchiveId(change.targetId);
+      setArchiveFocusNonce(n => n + 1);
+      setActiveTab('archives');
+    }
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleMarkAllChangesRead = () => {
+    const next = allReadState(changeLog, alertState);
+    setAlertState(next);
+    saveAlertState(alertScope, next);
+  };
 
   // 1. Initialize Firebase Auth and Connection Verification
   useEffect(() => {
@@ -1049,7 +1127,7 @@ export default function App() {
   // Publie (ou republie) l'instantané chiffré d'un lien ; ne réécrit pas si le contenu n'a pas changé
   const publishShare = async (access: BranchAccess, force = false): Promise<void> => {
     if (!currentUser || !access.shareKey) return;
-    const snapshot = buildShareSnapshot(data, archives, access);
+    const snapshot = buildShareSnapshot(data, archives, access, changeLog);
     const fingerprint = await snapshotFingerprint(snapshot);
     const fpKey = `genealogor_share_fp_${access.shareToken}`;
     try {
@@ -1103,7 +1181,7 @@ export default function App() {
       }
     }, 3000);
     return () => clearTimeout(timer);
-  }, [data, archives, accessList, currentUser, userRole]);
+  }, [data, archives, accessList, currentUser, userRole, changeLog]);
 
   // Vue partagée : lecture publique de l'instantané, mises à jour en direct
   const [sharedView, setSharedView] = useState<SharedViewState>({ status: 'loading' });
@@ -1115,6 +1193,15 @@ export default function App() {
     setData(tree);
     setArchives(snapshot.archives);
     setAccessList([]);
+    const changes = snapshot.changes || [];
+    setChangeLog(changes);
+    // Première ouverture du lien : l'historique antérieur n'est pas signalé comme nouveau
+    setAlertState(prev => {
+      if (prev) return prev;
+      const initial = loadAlertState(alertScope) || allReadState(changes, null);
+      saveAlertState(alertScope, initial);
+      return initial;
+    });
     setUserRole('viewer');
     setCurrentBranchScope('all');
     setSelectedPersonId(prev => (prev && tree.individuals[prev]) ? prev : (tree.rootPersonId || Object.keys(tree.individuals)[0] || ''));
@@ -1190,27 +1277,38 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#FBF9F5] dark:bg-[#121418] text-stone-900 dark:text-stone-100 flex flex-col font-sans transition-colors duration-200">
       
-      {/* Top Navbar */}
-      <Navbar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onOpenShareModal={() => setIsShareModalOpen(true)}
-        onOpenExportModal={() => setIsExportModalOpen(true)}
-        onOpenHamburgerMenu={() => setIsHamburgerOpen(true)}
-        onOpenSystemSettings={() => setIsSystemSettingsOpen(true)}
-        onOpenTreeManager={() => setIsTreeManagerOpen(true)}
-        themeMode={themeMode}
-        onToggleTheme={handleToggleTheme}
-        currentAccess={accessList.find(a => a.branch === currentBranchScope)}
-        userRole={userRole}
-        connectedPeerCount={connectedPeerCount}
-        isWsConnected={isWsConnected}
-        treeTitle={data.sourceHeader || roomId || 'Mon Arbre'}
-        currentUser={currentUser}
-        onLogin={handleLogin}
-        onLogout={handleLogout}
-        isCloudSynced={isCloudSynced}
-      />
+      {/* Barre de navigation et alertes, épinglées ensemble en haut de l'écran */}
+      <div className="sticky top-0 z-40">
+        <Navbar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onOpenShareModal={() => setIsShareModalOpen(true)}
+          onOpenExportModal={() => setIsExportModalOpen(true)}
+          onOpenHamburgerMenu={() => setIsHamburgerOpen(true)}
+          onOpenSystemSettings={() => setIsSystemSettingsOpen(true)}
+          onOpenTreeManager={() => setIsTreeManagerOpen(true)}
+          themeMode={themeMode}
+          onToggleTheme={handleToggleTheme}
+          currentAccess={accessList.find(a => a.branch === currentBranchScope)}
+          userRole={userRole}
+          connectedPeerCount={connectedPeerCount}
+          isWsConnected={isWsConnected}
+          treeTitle={data.sourceHeader || roomId || 'Mon Arbre'}
+          currentUser={currentUser}
+          onLogin={handleLogin}
+          onLogout={handleLogout}
+          isCloudSynced={isCloudSynced}
+        />
+
+        {/* Alertes : modifications de l'arbre non encore vues, cliquables */}
+        <ChangeAlertBanner
+          unread={unreadChanges}
+          data={effectiveData}
+          archives={effectiveArchives}
+          onOpen={handleOpenChange}
+          onMarkAllRead={handleMarkAllChangesRead}
+        />
+      </div>
 
       {/* Anomalies alert bar if any detected */}
       {anomalies.length > 0 && activeTab === 'tree' && (
@@ -1373,6 +1471,7 @@ export default function App() {
 
         {activeTab === 'archives' && (
           <ArchivesView
+            key={archiveFocusNonce}
             archives={effectiveArchives}
             data={effectiveData}
             selectedArchiveId={selectedArchiveId}
