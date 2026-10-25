@@ -1,12 +1,10 @@
 {
-  "projectId": "geometric-gift-7f6jr",
-  "appId": "1:961995967362:web:8344bfc153c4de03eadd9b",
-  "apiKey": "AIzaSyCv4hfmchW57Ef_IbA3JhmbaUn6pNx-gtQ",
-  "authDomain": "geometric-gift-7f6jr.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-genealogorarbref-e97e8609-ada5-4b56-bbbe-863fc83c3d4b",
-  "storageBucket": "geometric-gift-7f6jr.firebasestorage.app",
-  "messagingSenderId": "961995967362",
-  "measurementId": "",
-  "oAuthClientId": "961995967362-cke0pdsu3ti0kemgmoam2stp1u3gjirn.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "projectId": "genealogor-1a03d7",
+  "appId": "1:722101137770:web:fda38535ad9f53936cf513",
+  "apiKey": "AIzaSyBruWTt1CxaZVvJJhREWR45kslPmZamTrE",
+  "authDomain": "genealogor-1a03d7.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "genealogor-1a03d7.firebasestorage.app",
+  "messagingSenderId": "722101137770",
+  "measurementId": ""
 }

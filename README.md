@@ -261,7 +261,7 @@ Les images des archives ne sont pas incluses dans la copie partagée (limite de 
 
 Les règles de `firestore.rules` autorisent la lecture d'un partage par son jeton et réservent l'écriture à son créateur.
 
-- **Console** : Firebase Console → projet `geometric-gift-7f6jr` → Firestore Database → base `ai-studio-genealogorarbref-…` → onglet **Règles** → coller le contenu de `firestore.rules` → **Publier**.
+- **Console** : Firebase Console → projet `genealogor-1a03d7` → Firestore Database → onglet **Règles** → coller le contenu de `firestore.rules` → **Publier**.
 - **Ligne de commande** (`firebase.json` et `.firebaserc` sont fournis) :
 
 ```bash

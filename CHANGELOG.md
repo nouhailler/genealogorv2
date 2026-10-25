@@ -15,6 +15,7 @@ Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
 - Règles Firestore : collection `shares` (lecture par jeton, écriture réservée au créateur). Ajout de `firebase.json` / `.firebaserc` pour les déployer.
 - La clé de partage n'est jamais diffusée par le relais temps réel ni écrite sur le disque du serveur.
 - 11 nouveaux tests (`share-snapshot.test.ts`) — 177 tests au total.
+- **Nouveau projet Firebase dédié `genealogor-1a03d7`** (base Firestore `(default)` en Europe, `eur3`) : le projet créé par AI Studio (`geometric-gift-7f6jr`) n'était pas administrable depuis le compte du propriétaire, ce qui empêchait d'y déployer les règles. Les données Firestore de l'ancien projet ne sont pas reprises (l'arbre local et le fichier GEDCOM restent la source).
 
 ## [2.9.1] — 2026-10-25
 

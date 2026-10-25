@@ -877,7 +877,7 @@ app.post('/api/auth/room-token', async (req, res) => {
       const idToken = authHeader.substring(7).trim();
       if (idToken) {
         try {
-          const expectedProjectId = firebaseConfig.projectId || 'geometric-gift-7f6jr';
+          const expectedProjectId = firebaseConfig.projectId || 'genealogor-1a03d7';
           const verifyResult = await verifyFirebaseIdToken(idToken, {
             expectedProjectId,
             checkRevoked: true,
