@@ -3,6 +3,17 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.17.0] — 2026-10-25
+
+### 🕸️ Amélioré — Graphe des relations lisible (mobile compris)
+- La zone de dessin n'avait presque pas de hauteur (bande de ~150 px) : elle occupe désormais 65 % de l'écran.
+- **Graphe centré sur la personne sélectionnée**, limité à ses proches (Proches, 2 ou 3 liens de parenté, ou Tout), au lieu des 464 personnes d'un coup (`relation-graph.ts`).
+- **Disposition par génération** : ancêtres en haut, descendants en bas, conjoints côte à côte ; mise en place calculée d'avance (plus de « danse »), cadrage automatique et bouton « Ajuster ».
+- Noms complets et années, détourés pour rester lisibles, espacés selon leur longueur ; sur un grand graphe, seuls les proches immédiats sont nommés (option « Tous les noms »).
+- Toucher une personne recentre le graphe sur elle et affiche une carte avec « Ouvrir la fiche » (on ne quitte plus l'écran par erreur).
+- Barre de navigation : le nom « Genealogor » est masqué sur les écrans très étroits et le titre de l'arbre se tronque, ce qui supprime le défilement horizontal de toutes les pages sur mobile.
+- 4 nouveaux tests — 209 tests au total.
+
 ## [2.16.0] — 2026-10-25
 
 ### 🗺️ Corrigé — Carte : lieux mal placés et carte qui partait en mer

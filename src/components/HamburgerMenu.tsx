@@ -217,7 +217,7 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
               >
                 <div className="flex items-center gap-2.5">
                   <Network className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                  <span>Graphe Relationnel D3</span>
+                  <span>Graphe des relations</span>
                 </div>
                 {activeTab === 'graph' && <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
               </button>

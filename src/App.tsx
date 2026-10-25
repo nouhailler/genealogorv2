@@ -1504,7 +1504,8 @@ export default function App() {
             individuals={effectiveData.individuals}
             families={effectiveData.families}
             selectedPersonId={selectedPersonId}
-            onSelectPerson={(id) => {
+            onFocusPerson={setSelectedPersonId}
+            onOpenProfile={(id) => {
               setSelectedPersonId(id);
               setActiveTab('profile');
             }}
