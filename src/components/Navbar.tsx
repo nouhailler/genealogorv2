@@ -1,8 +1,4 @@
-import { 
-  Share2, Users, Shield, BookOpen, Clock, MapPin, BarChart3, 
-  GitFork, LogIn, LogOut, CloudCheck, Cloud, Menu, Moon, Sun, 
-  Settings, Download, FolderTree
-} from 'lucide-react';
+import { Share2, LogIn, LogOut, Menu, Moon, Sun, Settings, FolderTree } from 'lucide-react';
 import { BranchAccess, BranchRole } from '../types/genealogy';
 import { User as FirebaseUser } from 'firebase/auth';
 import { Logo } from './Logo';
@@ -69,7 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         
         {/* Zone 1: Hamburger Menu + Logo + Title (peut se réduire : le titre de l'arbre est tronqué sur petit écran) */}
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0 overflow-hidden">
           <button
             type="button"
             onClick={onOpenHamburgerMenu}
@@ -122,82 +118,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           {userRole === 'admin' ? (
             <span 
               title="Profil Créateur / Administrateur : Vous avez créé cet arbre et disposez de tous les droits de gestion et de création." 
-              className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800 select-none"
+              className="hidden lg:inline-flex shrink-0 items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800 select-none"
             >
               👑 Créateur
             </span>
           ) : (
             <span 
               title="Profil Lecteur (par défaut) : Consultation de l'arbre partagé. En aucun cas le lecteur ne peut créer d'arbre." 
-              className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sky-100 dark:bg-sky-950/80 text-sky-900 dark:text-sky-300 border border-sky-300/70 dark:border-sky-800 select-none"
+              className="hidden lg:inline-flex shrink-0 items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sky-100 dark:bg-sky-950/80 text-sky-900 dark:text-sky-300 border border-sky-300/70 dark:border-sky-800 select-none"
             >
               👁️ Lecteur
             </span>
           )}
         </div>
-
-        {/* Zone 2: Navigation Links (Desktop) */}
-        <nav className="hidden lg:flex items-center gap-1 xl:gap-2 text-sm font-medium text-stone-600 dark:text-stone-300">
-          <button
-            onClick={() => onTabChange('tree')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeTab === 'tree' ? 'text-amber-950 dark:text-amber-200 bg-amber-100/70 dark:bg-amber-950/50 font-semibold shadow-2xs' : 'hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100/70 dark:hover:bg-stone-800/60'
-            }`}
-          >
-            <GitFork className="w-4 h-4 text-amber-700 dark:text-amber-400" />
-            <span>Arbre</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('profile')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeTab === 'profile' ? 'text-amber-950 dark:text-amber-200 bg-amber-100/70 dark:bg-amber-950/50 font-semibold shadow-2xs' : 'hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100/70 dark:hover:bg-stone-800/60'
-            }`}
-          >
-            <Users className="w-4 h-4 text-stone-600 dark:text-stone-400" />
-            <span>Fiche Individu</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('archives')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeTab === 'archives' ? 'text-amber-950 dark:text-amber-200 bg-amber-100/70 dark:bg-amber-950/50 font-semibold shadow-2xs' : 'hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100/70 dark:hover:bg-stone-800/60'
-            }`}
-          >
-            <BookOpen className="w-4 h-4 text-amber-800 dark:text-amber-400" />
-            <span>Archives & Actes</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('timeline')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeTab === 'timeline' ? 'text-amber-950 dark:text-amber-200 bg-amber-100/70 dark:bg-amber-950/50 font-semibold shadow-2xs' : 'hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100/70 dark:hover:bg-stone-800/60'
-            }`}
-          >
-            <Clock className="w-4 h-4 text-stone-600 dark:text-stone-400" />
-            <span>Chronologie</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('map')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeTab === 'map' ? 'text-amber-950 dark:text-amber-200 bg-amber-100/70 dark:bg-amber-950/50 font-semibold shadow-2xs' : 'hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100/70 dark:hover:bg-stone-800/60'
-            }`}
-          >
-            <MapPin className="w-4 h-4 text-stone-600 dark:text-stone-400" />
-            <span>Carte</span>
-          </button>
-
-          <button
-            onClick={() => onTabChange('stats')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeTab === 'stats' ? 'text-amber-950 dark:text-amber-200 bg-amber-100/70 dark:bg-amber-950/50 font-semibold shadow-2xs' : 'hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100/70 dark:hover:bg-stone-800/60'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4 text-stone-600 dark:text-stone-400" />
-            <span>Statistiques</span>
-          </button>
-        </nav>
 
         {/* Zone 3: Quick utilities + PWA Install + Theme + Share + Auth */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
@@ -279,7 +212,9 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Mobile nav bar navigation */}
-      <div className="lg:hidden flex items-center justify-between gap-1 overflow-x-auto pt-2 pb-0.5 border-t border-stone-200/60 dark:border-stone-800 mt-2 text-xs">
+      {/* Onglets de navigation, toujours sur leur propre ligne : sur une seule ligne avec le titre de l'arbre
+          et les boutons, ils les écrasaient (superpositions) quelle que soit la largeur de l'écran */}
+      <div className="max-w-7xl mx-auto flex items-center justify-between md:justify-start gap-1 md:gap-2 overflow-x-auto pt-2 pb-0.5 border-t border-stone-200/60 dark:border-stone-800 mt-2 text-xs md:text-sm">
         <button
           onClick={() => onTabChange('tree')}
           className={`px-2.5 py-1 rounded-md whitespace-nowrap ${activeTab === 'tree' ? 'font-bold text-amber-950 dark:text-amber-200 bg-amber-100/70 dark:bg-amber-950/60' : 'text-stone-600 dark:text-stone-400'}`}

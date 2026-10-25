@@ -3,6 +3,13 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.18.2] — 2026-10-25
+
+### 🧩 Corrigé — Barre du haut : textes et boutons superposés sur ordinateur
+- Sur une seule ligne, les onglets (Arbre, Fiche, Archives…) écrasaient le nom de l'application, le titre de l'arbre et les badges : les onglets sont désormais toujours sur leur propre ligne, sous la barre, à toutes les largeurs.
+- La partie gauche de la barre tronque le titre de l'arbre au lieu de déborder ; le badge Créateur / Lecteur n'apparaît qu'à partir des écrans larges.
+- Vérifié sans superposition ni défilement horizontal à 375, 768, 1024, 1280 et 1600 px.
+
 ## [2.18.1] — 2026-10-25
 
 ### 🧭 Modifié — Carte et connexion plus claires
