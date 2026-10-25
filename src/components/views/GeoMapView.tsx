@@ -347,14 +347,22 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
 
   // Cadrage sur les communes visibles : à la fin de la localisation, au changement de filtre, et sur demande.
   // Jamais à la sélection d'une commune (la carte ne doit pas « sauter »).
-  const fitToSites = (list: Site[] = visibleSites) => {
+  const fitToSites = (list: Site[] = visibleSites, animate = false) => {
     const map = mapRef.current;
     if (!map) return;
     if (list.length === 0) {
-      map.setView(FRANCE_CENTER, 6);
+      map.setView(FRANCE_CENTER, 6, { animate });
       return;
     }
-    map.fitBounds(L.latLngBounds(list.map(s => [s.coords.lat, s.coords.lng] as [number, number])), { padding: [40, 40], maxZoom: 11 });
+    const bounds = L.latLngBounds(list.map(s => [s.coords.lat, s.coords.lng] as [number, number]));
+    if (animate) map.flyToBounds(bounds, { padding: [40, 40], maxZoom: 11, duration: 0.8 });
+    else map.fitBounds(bounds, { padding: [40, 40], maxZoom: 11 });
+  };
+
+  // « Tout afficher » : vue d'ensemble de toutes les communes, fiche de commune refermée
+  const showAllSites = () => {
+    setSelectedKey('');
+    fitToSites(visibleSites, true);
   };
   const locatingDone = rawPlaces.length > 0 && pendingCount === 0;
   useEffect(() => {
@@ -472,12 +480,12 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
 
           <button
             type="button"
-            onClick={() => fitToSites()}
+            onClick={showAllSites}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-900 hover:bg-amber-950 text-white rounded-xl text-xs font-semibold cursor-pointer"
-            title="Afficher toutes les communes"
+            title="Revenir à la vue d'ensemble de toutes les communes (après un zoom ou un déplacement)"
           >
             <Compass className="w-3.5 h-3.5" />
-            <span>Recadrer</span>
+            <span>Tout afficher</span>
           </button>
         </div>
       </div>

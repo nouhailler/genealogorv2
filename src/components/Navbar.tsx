@@ -263,7 +263,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <LogOut className="w-3.5 h-3.5" />
               </button>
             </div>
-          ) : (
+          ) : userRole === 'admin' && (
+            // Connexion Google réservée à l'administrateur (sauvegarde Firestore, liens de partage) :
+            // un lecteur reçoit l'arbre par son lien et la connexion ne lui donnerait aucun droit
             <button
               onClick={onLogin}
               className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-stone-700 dark:text-stone-200 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700 rounded-lg shadow-2xs transition-all whitespace-nowrap cursor-pointer"

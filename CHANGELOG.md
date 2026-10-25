@@ -3,6 +3,12 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.18.1] — 2026-10-25
+
+### 🧭 Modifié — Carte et connexion plus claires
+- Carte : « Recadrer » devient « Tout afficher » ; il revient en douceur à la vue d'ensemble de toutes les communes (après un zoom ou un déplacement) et referme la fiche de commune ouverte.
+- Le bouton « Connexion » (Google) n'est plus proposé au lecteur d'un lien partagé : la connexion ne lui donnait aucun droit ; il reste réservé à l'administrateur (sauvegarde Firestore, liens de partage).
+
 ## [2.18.0] — 2026-10-25
 
 ### 🗺️ Amélioré — Les personnes d'une commune, directement sur la carte
