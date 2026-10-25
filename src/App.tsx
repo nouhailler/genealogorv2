@@ -1557,13 +1557,15 @@ export default function App() {
           </button>
         )}
 
-        <button
-          onClick={() => setIsExportModalOpen(true)}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-stone-800 bg-white/95 border border-stone-300 shadow-md hover:bg-stone-50 transition-all backdrop-blur-xs cursor-pointer"
-        >
-          <Database className="w-3.5 h-3.5 text-amber-800" />
-          <span>Fichiers & Sauvegardes</span>
-        </button>
+        {userRole === 'admin' && (
+          <button
+            onClick={() => setIsExportModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-stone-800 bg-white/95 border border-stone-300 shadow-md hover:bg-stone-50 transition-all backdrop-blur-xs cursor-pointer"
+          >
+            <Database className="w-3.5 h-3.5 text-amber-800" />
+            <span>Fichiers & Sauvegardes</span>
+          </button>
+        )}
       </div>
 
       {/* Floating realtime toast */}

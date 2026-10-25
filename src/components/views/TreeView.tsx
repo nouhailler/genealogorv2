@@ -8,6 +8,7 @@ import { GenealogyData, Individual } from '../../types/genealogy';
 import { computeSosaNumbers } from '../../lib/sosa-aboville';
 import { InfoTooltip } from '../InfoTooltip';
 import { TreeSiblingCarousel } from './TreeSiblingCarousel';
+import { FamilyLinksPanel } from './FamilyLinksPanel';
 
 interface TreeViewProps {
   data: GenealogyData;
@@ -42,10 +43,41 @@ export const TreeView: React.FC<TreeViewProps> = ({
   userRole,
 }) => {
   const [treeMode, setTreeMode] = useState<'ancestors' | 'descendants'>('ancestors');
-  const [generationsCount, setGenerationsCount] = useState<number>(4);
+  // Petit écran : 3 générations et fratrie dans le panneau « Liens familiaux » plutôt qu'à droite de l'arbre
+  const isSmallScreen = typeof window !== 'undefined' && window.innerWidth < 640;
+  const [generationsCount, setGenerationsCount] = useState<number>(isSmallScreen ? 3 : 4);
   const [searchFilter, setSearchFilter] = useState('');
-  const [showSiblingsRight, setShowSiblingsRight] = useState<boolean>(true);
+  const [showSiblingsRight, setShowSiblingsRight] = useState<boolean>(!isSmallScreen);
   const treeCanvasRef = useRef<HTMLDivElement>(null);
+  const treeContentRef = useRef<HTMLDivElement>(null);
+
+  // Ajustement à l'écran : l'arbre est réduit pour tenir en largeur (zoom = null), ou zoomé manuellement
+  const [zoom, setZoom] = useState<number | null>(null);
+  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
+  const [availableWidth, setAvailableWidth] = useState(0);
+
+  useEffect(() => {
+    const canvas = treeCanvasRef.current;
+    const content = treeContentRef.current;
+    if (!canvas || !content || typeof ResizeObserver === 'undefined') return;
+    const measure = () => {
+      const style = getComputedStyle(canvas);
+      setAvailableWidth(canvas.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
+      // offsetWidth/Height ignorent la transformation : taille réelle de l'arbre à l'échelle 1
+      setNaturalSize({ width: content.offsetWidth, height: content.offsetHeight });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(canvas);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [treeMode, selectedPersonId, data]);
+
+  const fitScale = naturalSize.width > 0 && availableWidth > 0
+    ? Math.min(1, Math.max(0.25, availableWidth / naturalSize.width))
+    : 1;
+  const scale = zoom ?? fitScale;
+  const changeZoom = (delta: number) => setZoom(Math.min(1.5, Math.max(0.25, Math.round((scale + delta) * 100) / 100)));
 
   // Arbre plus large que l'écran : recentrer le défilement horizontal sur la personne pivot (en haut au centre)
   useEffect(() => {
@@ -58,7 +90,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
     } else {
       el.scrollLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
     }
-  }, [selectedPersonId, generationsCount, treeMode, showSiblingsRight]);
+  }, [selectedPersonId, generationsCount, treeMode, showSiblingsRight, scale]);
 
   const currentPerson = data.individuals[selectedPersonId] || Object.values(data.individuals)[0];
   // Numérotation Sosa-Stradonitz toujours relative au de cujus de l'arbre (comme la fiche individuelle),
@@ -143,6 +175,21 @@ export const TreeView: React.FC<TreeViewProps> = ({
     return children;
   };
 
+  // Conjoints de la personne (toutes unions)
+  const getSpouses = (personId: string): Individual[] => {
+    const person = data.individuals[personId];
+    if (!person) return [];
+    const spouses: Individual[] = [];
+    for (const famId of person.familiesAsSpouse) {
+      const fam = data.families[famId];
+      const spouseId = fam && (fam.husbandId === personId ? fam.wifeId : fam.husbandId);
+      if (spouseId && data.individuals[spouseId] && !spouses.some(s => s.id === spouseId)) {
+        spouses.push(data.individuals[spouseId]);
+      }
+    }
+    return spouses;
+  };
+
   // Recursive Ancestor Node
   const renderAncestorNode = (person: Individual | undefined, gen: number, sosa: number) => {
     if (gen > generationsCount) return null;
@@ -150,7 +197,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
     if (!person) {
       return (
         <div className="flex flex-col items-center">
-          <div className="w-52 p-3 rounded-xl border border-dashed border-stone-300 bg-stone-50/50 text-center text-xs text-stone-400 italic">
+          <div className="w-36 sm:w-52 p-2 sm:p-3 rounded-xl border border-dashed border-stone-300 bg-stone-50/50 text-center text-xs text-stone-400 italic">
             Ancêtre non renseigné
           </div>
         </div>
@@ -168,7 +215,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
       <div
         onClick={() => onSelectPerson(person.id)}
         data-tree-root={isRootGen ? '' : undefined}
-        className={`w-56 p-3.5 rounded-xl border transition-all cursor-pointer relative shadow-xs text-left group ${
+        className={`w-40 sm:w-56 p-2.5 sm:p-3.5 rounded-xl border transition-all cursor-pointer relative shadow-xs text-left group ${
           isSelected
             ? 'bg-amber-50 border-amber-800 ring-2 ring-amber-800/40 shadow-sm'
             : 'bg-white border-stone-200/90 hover:border-stone-400 hover:bg-stone-50/70'
@@ -234,7 +281,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
         {gen < generationsCount && (father || mother) && (
           <div className="flex flex-col items-center w-full">
             <div className="w-px h-6 bg-stone-300" />
-            <div className="relative flex justify-center gap-6 pt-6 border-t border-stone-300 w-full">
+            <div className="relative flex justify-center gap-2 sm:gap-6 pt-4 sm:pt-6 border-t border-stone-300 w-full">
               {renderAncestorNode(father, gen + 1, sosa * 2)}
               {renderAncestorNode(mother, gen + 1, sosa * 2 + 1)}
             </div>
@@ -480,14 +527,52 @@ export const TreeView: React.FC<TreeViewProps> = ({
         </div>
       </div>
 
+      {/* Liens familiaux lisibles sur tous les écrans : parents, fratrie, conjoints, enfants */}
+      <FamilyLinksPanel
+        father={getParents(currentPerson.id).father}
+        mother={getParents(currentPerson.id).mother}
+        siblings={rootSiblings}
+        spouses={getSpouses(currentPerson.id)}
+        children={getChildren(currentPerson.id)}
+        sosaMap={sosaMap}
+        onSelectPerson={onSelectPerson}
+      />
+
       {/* Interactive Tree Rendering Canvas */}
       {/* Pas de justify-center sur le conteneur défilant : un arbre plus large que l'écran serait
           rogné à gauche sans pouvoir y défiler. On centre avec des marges auto, ramenées à 0 en cas de débordement. */}
-      <div ref={treeCanvasRef} className="bg-[#F7F4EE]/60 border border-stone-200/90 rounded-2xl p-8 min-h-[500px] overflow-auto flex items-center shadow-inner">
+      <div className="relative">
+      {treeMode === 'ancestors' && (
+        <div className="absolute top-2 right-2 z-10 flex items-center gap-1 bg-white/95 dark:bg-stone-900/95 border border-stone-200 dark:border-stone-700 rounded-lg p-1 shadow-xs">
+          <button type="button" onClick={() => changeZoom(-0.1)} title="Réduire" aria-label="Réduire l'arbre"
+            className="p-1.5 rounded-md hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 cursor-pointer">
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          <button type="button" onClick={() => setZoom(null)} title="Ajuster l'arbre à la largeur de l'écran"
+            className={`px-2 py-1 rounded-md text-[11px] font-semibold cursor-pointer ${zoom === null ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200' : 'hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300'}`}>
+            Ajuster · {Math.round(scale * 100)} %
+          </button>
+          <button type="button" onClick={() => changeZoom(0.1)} title="Agrandir" aria-label="Agrandir l'arbre"
+            className="p-1.5 rounded-md hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 cursor-pointer">
+            <ZoomIn className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+      <div ref={treeCanvasRef} className="bg-[#F7F4EE]/60 border border-stone-200/90 rounded-2xl p-3 sm:p-8 min-h-[320px] sm:min-h-[500px] overflow-auto flex items-center shadow-inner">
         {treeMode === 'ancestors' ? (
-          <div className="min-w-full flex py-6">
-            <div className="mx-auto shrink-0">
-              {renderAncestorNode(currentPerson, 1, 1)}
+          <div className="min-w-full flex pt-12 pb-4 sm:py-10">
+            {/* Boîte à la taille réduite de l'arbre, centrée par marges auto ; l'arbre y est mis à l'échelle depuis le coin haut-gauche */}
+            <div
+              className="mx-auto shrink-0 relative"
+              style={{ width: naturalSize.width * scale || undefined, height: naturalSize.height * scale || undefined }}
+            >
+              <div
+                ref={treeContentRef}
+                className="absolute top-0 left-0 w-max"
+                style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
+              >
+                {renderAncestorNode(currentPerson, 1, 1)}
+              </div>
             </div>
           </div>
         ) : (
@@ -552,6 +637,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
             </div>
           </div>
         )}
+      </div>
       </div>
 
     </div>

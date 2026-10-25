@@ -419,45 +419,47 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             </div>
           )}
 
-          {/* CATÉGORIE 4 : DONNÉES & SAUVEGARDES */}
-          <div className="space-y-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-400 flex items-center gap-1.5 px-2">
-              <HardDrive className="w-3.5 h-3.5" />
-              Sauvegardes & GEDCOM
-            </span>
+          {/* CATÉGORIE 4 : DONNÉES & SAUVEGARDES (administrateur) */}
+          {userRole === 'admin' && (
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-400 flex items-center gap-1.5 px-2">
+                <HardDrive className="w-3.5 h-3.5" />
+                Sauvegardes & GEDCOM
+              </span>
 
-            <div className="space-y-1 bg-white/70 dark:bg-stone-900/40 p-1.5 rounded-xl border border-stone-200/70 dark:border-stone-800/80">
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onOpenExportModal();
-                }}
-                className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800/60 text-stone-700 dark:text-stone-300 transition-colors cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Download className="w-4 h-4 text-stone-500" />
-                  <span>Sauvegarde Chiffrée AES-GCM 256</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-stone-400" />
-              </button>
+              <div className="space-y-1 bg-white/70 dark:bg-stone-900/40 p-1.5 rounded-xl border border-stone-200/70 dark:border-stone-800/80">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenExportModal();
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800/60 text-stone-700 dark:text-stone-300 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Download className="w-4 h-4 text-stone-500" />
+                    <span>Sauvegarde Chiffrée AES-GCM 256</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-stone-400" />
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onOpenExportModal();
-                }}
-                className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800/60 text-stone-700 dark:text-stone-300 transition-colors cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Upload className="w-4 h-4 text-stone-500" />
-                  <span>Import / Export GEDCOM 5.5.1</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-stone-400" />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenExportModal();
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800/60 text-stone-700 dark:text-stone-300 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Upload className="w-4 h-4 text-stone-500" />
+                    <span>Import / Export GEDCOM 5.5.1</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-stone-400" />
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* CATÉGORIE 5 : INSTALLATION PWA */}
           <div className="space-y-2">

@@ -3,6 +3,14 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.13.0] — 2026-10-25
+
+### 📱 Amélioré — Arbre adapté à l'écran et liens familiaux visibles
+- **Arbre ajusté à la largeur de l'écran** : l'ascendance est mise à l'échelle pour tenir entièrement (plus de cartes coupées en deux sur mobile), avec boutons − / « Ajuster » / + pour zoomer puis faire défiler, recentré sur la personne affichée.
+- Sur petit écran : cartes plus étroites, 3 générations par défaut, fratrie déplacée dans le panneau des liens.
+- **Panneau « Liens familiaux »** au-dessus de l'arbre : père, mère, fratrie, conjoints et enfants en boutons lisibles (année de naissance, numéro Sosa) ; un clic recentre l'arbre sur la personne.
+- Profil Lecteur : le bouton flottant « Fichiers & Sauvegardes » et la rubrique « Sauvegardes & GEDCOM » du menu sont réservés à l'administrateur.
+
 ## [2.12.0] — 2026-10-25
 
 ### ✏️ Ajouté — Renommer un arbre
