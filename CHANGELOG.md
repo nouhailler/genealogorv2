@@ -3,6 +3,12 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.15.0] — 2026-10-25
+
+### 🎯 Ajouté — « Voir dans l'arbre » depuis une fiche
+- Bouton « Voir dans l'arbre » sur la fiche individuelle : ouvre l'arbre avec la personne comme pivot, à 100 % (cartes lisibles), page amenée sur l'arbre et défilement horizontal centré sur la personne.
+- Correction : le recentrage horizontal est refait une fois l'arbre mesuré (il était décalé au retour sur l'onglet Arbre).
+
 ## [2.14.1] — 2026-10-25
 
 ### ⏳ Ajouté — Âge au décès dans la chronologie

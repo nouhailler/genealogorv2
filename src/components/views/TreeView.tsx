@@ -21,6 +21,9 @@ interface TreeViewProps {
   onOpenImportModal?: () => void;
   /** Définit la personne de référence (de cujus, Sosa 1) de l'arbre — administrateur uniquement */
   onSetRootPerson?: (personId: string) => void;
+  /** Incrémenté pour amener l'arbre à l'écran (ex. « Voir dans l'arbre » depuis une fiche) */
+  focusRequest?: number;
+  onFocusHandled?: () => void;
   onOpenTreeManager?: () => void;
   treeTitle?: string;
   onDeleteCurrentTree?: () => void;
@@ -37,6 +40,8 @@ export const TreeView: React.FC<TreeViewProps> = ({
   onAddNewPerson,
   onOpenImportModal,
   onSetRootPerson,
+  focusRequest,
+  onFocusHandled,
   onOpenTreeManager,
   treeTitle,
   onDeleteCurrentTree,
@@ -73,6 +78,19 @@ export const TreeView: React.FC<TreeViewProps> = ({
     return () => observer.disconnect();
   }, [treeMode, selectedPersonId, data]);
 
+  // Demande de mise au point (« Voir dans l'arbre ») : cartes lisibles à 100 %, page amenée sur l'arbre ;
+  // l'effet de recentrage horizontal ci-dessus place ensuite la personne au milieu
+  useEffect(() => {
+    if (!focusRequest) return;
+    setZoom(1);
+    const timer = setTimeout(() => {
+      // Défilement immédiat : un défilement animé peut être interrompu par le redimensionnement de l'arbre
+      treeCanvasRef.current?.parentElement?.scrollIntoView({ block: 'start' });
+      onFocusHandled?.();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [focusRequest]);
+
   const fitScale = naturalSize.width > 0 && availableWidth > 0
     ? Math.min(1, Math.max(0.25, availableWidth / naturalSize.width))
     : 1;
@@ -90,7 +108,8 @@ export const TreeView: React.FC<TreeViewProps> = ({
     } else {
       el.scrollLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
     }
-  }, [selectedPersonId, generationsCount, treeMode, showSiblingsRight, scale]);
+    // naturalSize : l'arbre vient d'être mesuré (ex. au retour sur l'onglet), sa mise en page a changé
+  }, [selectedPersonId, generationsCount, treeMode, showSiblingsRight, scale, naturalSize.width]);
 
   const currentPerson = data.individuals[selectedPersonId] || Object.values(data.individuals)[0];
   // Numérotation Sosa-Stradonitz toujours relative au de cujus de l'arbre (comme la fiche individuelle),
@@ -541,7 +560,8 @@ export const TreeView: React.FC<TreeViewProps> = ({
       {/* Interactive Tree Rendering Canvas */}
       {/* Pas de justify-center sur le conteneur défilant : un arbre plus large que l'écran serait
           rogné à gauche sans pouvoir y défiler. On centre avec des marges auto, ramenées à 0 en cas de débordement. */}
-      <div className="relative">
+      {/* scroll-mt : l'arbre ne passe pas sous la barre de navigation épinglée */}
+      <div className="relative scroll-mt-32">
       {treeMode === 'ancestors' && (
         <div className="absolute top-2 right-2 z-10 flex items-center gap-1 bg-white/95 dark:bg-stone-900/95 border border-stone-200 dark:border-stone-700 rounded-lg p-1 shadow-xs">
           <button type="button" onClick={() => changeZoom(-0.1)} title="Réduire" aria-label="Réduire l'arbre"

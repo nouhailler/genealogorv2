@@ -1,7 +1,7 @@
 import { 
   User, Calendar, MapPin, Briefcase, FileText, Heart, 
   Users, Edit3, ArrowLeft, BookOpen, Shield, Award,
-  Camera, Tag, ExternalLink, Building2, Globe, Clock, ArrowUp, ArrowDown
+  Camera, Tag, ExternalLink, Building2, Globe, Clock, ArrowUp, ArrowDown, GitFork
 } from 'lucide-react';
 import { GenealogyData, Individual, ArchiveDocument } from '../../types/genealogy';
 import { computeSosaNumbers } from '../../lib/sosa-aboville';
@@ -18,6 +18,8 @@ interface ProfileViewProps {
   onOpenArchives: () => void;
   /** Ouvre la chronologie depuis cette fiche, vers les ascendants ou les descendants */
   onOpenTimeline?: (scope: 'ascendants' | 'descendants') => void;
+  /** Affiche la personne dans l'arbre, centré sur elle */
+  onShowInTree?: (personId: string) => void;
   onSelectArchive: (archiveId: string) => void;
   onAddNewPerson?: () => void;
   onOpenImportModal?: () => void;
@@ -32,6 +34,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onEditPerson,
   onOpenArchives,
   onOpenTimeline,
+  onShowInTree,
   onSelectArchive,
   onAddNewPerson,
   onOpenImportModal,
@@ -168,6 +171,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
+          {onShowInTree && (
+            <button
+              type="button"
+              onClick={() => onShowInTree(person.id)}
+              title={`Afficher ${person.name} dans l'arbre, centré sur sa fiche`}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-amber-900 hover:bg-amber-950 text-white shadow-xs transition-colors cursor-pointer"
+            >
+              <GitFork className="w-3.5 h-3.5" />
+              <span>Voir dans l'arbre</span>
+            </button>
+          )}
+
           {/* Chronologie depuis cette fiche */}
           {onOpenTimeline && (
             <div className="flex items-center rounded-lg border border-stone-200 bg-white overflow-hidden text-xs font-semibold text-stone-700">

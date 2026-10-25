@@ -342,6 +342,7 @@ export default function App() {
   const alertScope = isSharedView ? `share-${SHARE_PARAMS!.token}` : roomId;
   const [alertState, setAlertState] = useState<AlertReadState | null>(() => loadAlertState(alertScope));
   const [archiveFocusNonce, setArchiveFocusNonce] = useState(0);
+  const [treeFocusRequest, setTreeFocusRequest] = useState(0);
   const baselineRef = React.useRef<{ roomId: string; state: TreeState } | null>(null);
 
   useEffect(() => {
@@ -1406,6 +1407,8 @@ export default function App() {
             onOpenImportModal={userRole === 'admin' ? () => setIsExportModalOpen(true) : undefined}
             onOpenTreeManager={userRole === 'admin' ? () => setIsTreeManagerOpen(true) : undefined}
             onSetRootPerson={userRole === 'admin' ? handleSetRootPerson : undefined}
+            focusRequest={treeFocusRequest}
+            onFocusHandled={() => setTreeFocusRequest(0)}
             treeTitle={data.sourceHeader || roomId}
           />
         )}
@@ -1418,6 +1421,11 @@ export default function App() {
             onSelectPerson={setSelectedPersonId}
             onEditPerson={userRole === 'admin' ? (p) => setEditingPerson(p) : undefined}
             onOpenArchives={() => setActiveTab('archives')}
+            onShowInTree={(id) => {
+              setSelectedPersonId(id);
+              setActiveTab('tree');
+              setTreeFocusRequest(n => n + 1);
+            }}
             onOpenTimeline={(scope) => {
               setTimelineScope(scope);
               setActiveTab('timeline');
