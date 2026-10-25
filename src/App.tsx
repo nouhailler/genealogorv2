@@ -840,6 +840,32 @@ export default function App() {
     showToast(`Fiche de ${updated.name} enregistrée.`);
   };
 
+  // Renommage de l'arbre actif : le titre est porté par sourceHeader, repris par Firestore
+  // (champ title) et par les liens de partage (republiés automatiquement quand les données changent)
+  const handleRenameTree = async (title: string) => {
+    if (userRole !== 'admin') return;
+    const nextData = { ...data, sourceHeader: title };
+    setData(nextData);
+    setVersionedItem(`${STORAGE_KEYS.TREE}_${roomId}`, nextData);
+    setVersionedItem(STORAGE_KEYS.TREE, nextData);
+    recordKnownTree({
+      id: roomId,
+      title,
+      personCount: Object.keys(nextData.individuals).length,
+      lastOpenedAt: Date.now(),
+    });
+    realtimeClient.sendAction('tree:update', nextData);
+    if (!isWsConnected && isRelayAvailable) {
+      addPendingChange('tree:update', nextData);
+    }
+    try {
+      await saveTreeToFirestore(roomId, nextData, currentUser);
+    } catch (e) {
+      console.warn('Firestore sync fallback', e);
+    }
+    showToast(`Arbre renommé : ${title}`);
+  };
+
   // Choix du de cujus (Sosa 1) : la numérotation Sosa de toutes les vues en dépend
   const handleSetRootPerson = async (personId: string) => {
     if (userRole !== 'admin' || !data.individuals[personId]) return;
@@ -1676,6 +1702,7 @@ export default function App() {
           showToast('Arbre supprimé définitivement.');
         }}
         onNoTreeLeft={handleNoTreeLeft}
+        onRenameTree={handleRenameTree}
         onOpenGedcomImport={(treeId) => {
           const targetId = treeId || roomId;
           const known = getKnownTrees().find(t => t.id === targetId);

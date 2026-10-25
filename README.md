@@ -79,6 +79,7 @@ Genealogor permet d'héberger et de naviguer entre **plusieurs arbres généalog
     - Génération automatique du slug d'URL et de Firestore conforme aux règles de sécurité (`^[a-zA-Z0-9_\-]+$`).
     - Choix de l'étape suivante : **« 1 : Créer puis 2 : Importer .GED »** (par défaut, ouvre directement l'étape d'import) ou **Partir d'un arbre vierge**.
     - Un identifiant déjà utilisé par un de vos arbres est refusé.
+  - **Renommer l'arbre actif** : icône crayon à côté de son nom ; le titre est mis à jour partout, liens de partage compris (l'identifiant technique ne change pas).
   - **Bouton « Import .GED » par arbre** : ouvre l'étape d'import pour cet arbre (avec avertissement si l'arbre contient déjà des individus, qui seront remplacés).
 - **Première utilisation : assistant en 2 étapes (`FirstTimeTreeWizard.tsx`)** :
   - Après l'acceptation des mentions légales, l'administrateur **crée d'abord son arbre** (nom + identifiant), **puis importe son fichier .GED** (ou part d'un arbre vierge).

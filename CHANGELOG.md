@@ -3,6 +3,12 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.12.0] — 2026-10-25
+
+### ✏️ Ajouté — Renommer un arbre
+- Gestionnaire d'arbres : icône crayon à côté du nom de l'arbre actif (administrateur) pour corriger son titre (ex. « GEDCOM File » issu d'un ancien import).
+- Le nouveau titre est enregistré localement, dans Firestore et dans la liste des arbres, et les liens de partage sont republiés automatiquement avec ce titre. L'identifiant technique (`?room=`) et les liens existants ne changent pas.
+
 ## [2.11.1] — 2026-10-25
 
 ### 👁️ Modifié — Interface épurée en mode lecture seule

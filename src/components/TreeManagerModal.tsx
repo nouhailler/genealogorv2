@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, FolderTree, Plus, Search, Check, RefreshCw, Cloud, HardDrive, 
   Trash2, ArrowRight, Sparkles, AlertCircle, Info, ExternalLink, GitFork, Users,
-  Upload, FileText, AlertTriangle
+  Upload, FileText, AlertTriangle, Pencil
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { 
@@ -36,6 +36,8 @@ interface TreeManagerModalProps {
   /** Appelé quand l'arbre actif a été supprimé et qu'il ne reste plus aucun arbre */
   onNoTreeLeft?: () => void;
   onOpenGedcomImport?: (treeId?: string) => void;
+  /** Renomme l'arbre actif (titre affiché partout, y compris sur les liens de partage) */
+  onRenameTree?: (title: string) => Promise<void> | void;
 }
 
 export const TreeManagerModal: React.FC<TreeManagerModalProps> = ({
@@ -51,6 +53,7 @@ export const TreeManagerModal: React.FC<TreeManagerModalProps> = ({
   onDeleteTree,
   onNoTreeLeft,
   onOpenGedcomImport,
+  onRenameTree,
 }) => {
   const [activeTab, setActiveTab] = useState<'switch' | 'create'>('switch');
   const [searchTerm, setSearchTerm] = useState('');
@@ -65,6 +68,24 @@ export const TreeManagerModal: React.FC<TreeManagerModalProps> = ({
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [createActionOption, setCreateActionOption] = useState<'empty' | 'gedcom'>('gedcom');
+
+  // Renommage de l'arbre actif
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+
+  const startRename = () => {
+    setRenameValue(currentTreeTitle && currentTreeTitle !== currentRoomId ? currentTreeTitle : '');
+    setIsRenaming(true);
+  };
+
+  const submitRename = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = renameValue.trim();
+    if (!title || !onRenameTree) return;
+    await onRenameTree(title);
+    setKnownTrees(getKnownTrees());
+    setIsRenaming(false);
+  };
 
   // État de suppression sécurisée d'un arbre
   const [treeToDelete, setTreeToDelete] = useState<KnownTree | null>(null);
@@ -330,9 +351,52 @@ export const TreeManagerModal: React.FC<TreeManagerModalProps> = ({
                 <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
                   Arbre Actif
                 </span>
-                <span className="font-serif font-bold text-base text-stone-900 dark:text-stone-100 truncate">
-                  {currentTreeTitle || currentRoomId || 'Mon Arbre'}
-                </span>
+                {isRenaming ? (
+                  <form onSubmit={submitRename} className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      autoFocus
+                      maxLength={120}
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Escape') setIsRenaming(false); }}
+                      placeholder="Ex: Famille Coste - Nouhailler"
+                      aria-label="Nouveau nom de l'arbre"
+                      className="text-sm font-serif font-bold bg-white dark:bg-stone-800 border border-amber-300 dark:border-amber-800 rounded-lg px-2.5 py-1 text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-amber-800 w-56"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!renameValue.trim()}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-900 hover:bg-amber-950 text-white disabled:opacity-40 cursor-pointer"
+                    >
+                      Renommer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsRenaming(false)}
+                      className="px-2 py-1 text-xs text-stone-600 dark:text-stone-400 hover:underline cursor-pointer"
+                    >
+                      Annuler
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <span className="font-serif font-bold text-base text-stone-900 dark:text-stone-100 truncate">
+                      {currentTreeTitle || currentRoomId || 'Mon Arbre'}
+                    </span>
+                    {userRole === 'admin' && onRenameTree && (
+                      <button
+                        type="button"
+                        onClick={startRename}
+                        title="Renommer l'arbre"
+                        aria-label="Renommer l'arbre"
+                        className="p-1 rounded-md text-stone-500 hover:text-amber-900 hover:bg-amber-100 dark:hover:bg-amber-900/40 cursor-pointer"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </>
+                )}
                 {userRole === 'admin' ? (
                   <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/70 text-amber-900 dark:text-amber-300 border border-amber-300/80 dark:border-amber-800">
                     👑 Profil Créateur
