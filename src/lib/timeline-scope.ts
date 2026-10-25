@@ -101,3 +101,56 @@ export function ageAtDeath(person: Individual): string | undefined {
   if (years === 0) return approximate ? undefined : 'avant 1 an';
   return `vers ${years} ans`;
 }
+
+/** Événement de chronologie rattaché (ou non, pour le contexte historique) à une génération */
+export interface GenerationalItem {
+  year: number;
+  sortKey: number;
+  /** Distance à la personne (voir getLineageDepths) ; absent pour un événement historique */
+  depth?: number;
+}
+
+/**
+ * Regroupe la chronologie par génération, de la plus proche de la personne à la plus lointaine,
+ * chaque génération restant dans l'ordre des dates. Un événement historique est placé dans la
+ * génération la plus proche dont la période (± 10 ans) le couvre ; sinon il est écarté.
+ */
+export function groupByGeneration<T extends GenerationalItem>(items: T[]): Array<{ depth: number; items: T[] }> {
+  const groups = new Map<number, T[]>();
+  for (const item of items) {
+    if (item.depth === undefined) continue;
+    const list = groups.get(item.depth) || [];
+    list.push(item);
+    groups.set(item.depth, list);
+  }
+  const ordered = Array.from(groups.entries())
+    .sort(([a], [b]) => Math.abs(a) - Math.abs(b))
+    .map(([depth, list]) => ({ depth, items: list }));
+
+  for (const item of items) {
+    if (item.depth !== undefined) continue;
+    const target = ordered.find(g => {
+      const years = g.items.filter(i => i.depth !== undefined).map(i => i.year);
+      return item.year >= Math.min(...years) - 10 && item.year <= Math.max(...years) + 10;
+    });
+    target?.items.push(item);
+  }
+  for (const group of ordered) group.items.sort((a, b) => a.sortKey - b.sortKey);
+  return ordered;
+}
+
+/** Titre d'une génération dans la chronologie */
+export function generationTitle(depth: number): string {
+  const n = Math.abs(depth);
+  if (n === 0) return 'La personne';
+  if (depth > 0) {
+    if (n === 1) return 'Parents';
+    if (n === 2) return 'Grands-parents';
+    if (n === 3) return 'Arrière-grands-parents';
+    return `Ancêtres · ${n}e génération`;
+  }
+  if (n === 1) return 'Enfants';
+  if (n === 2) return 'Petits-enfants';
+  if (n === 3) return 'Arrière-petits-enfants';
+  return `Descendants · ${n}e génération`;
+}

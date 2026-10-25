@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Clock, Calendar, MapPin, User, ChevronRight, Landmark, ArrowUp, ArrowDown, GitFork } from 'lucide-react';
 import { GenealogyData, LifeEvent } from '../../types/genealogy';
-import { TimelineScope, getLineageDepths, relationLabel, ageAtDeath } from '../../lib/timeline-scope';
+import { TimelineScope, getLineageDepths, relationLabel, ageAtDeath, groupByGeneration, generationTitle } from '../../lib/timeline-scope';
 
 interface TimelineViewProps {
   data: GenealogyData;
@@ -14,6 +14,8 @@ interface TimelineViewProps {
 
 interface TimelineEvent {
   year: number;
+  /** Clé de tri au jour près (AAAAMMJJ, mois et jour à 0 s'ils sont inconnus) */
+  sortKey: number;
   dateStr: string;
   type: 'birth' | 'death' | 'marriage' | 'historical';
   personId?: string;
@@ -24,7 +26,12 @@ interface TimelineEvent {
   relation?: string;
   /** Âge au décès, quand il peut être établi */
   age?: string;
+  /** Génération par rapport à la personne de départ (absente pour le contexte historique) */
+  depth?: number;
 }
+
+const dateKey = (p: { year?: number; month?: number; day?: number }) =>
+  (p.year || 0) * 10000 + (p.month || 0) * 100 + (p.day || 0);
 
 const HISTORICAL_CONTEXT: Array<{ year: number; title: string; desc: string }> = [
   { year: 1715, title: 'Mort de Louis XIV', desc: 'Début de la Régence et du règne de Louis XV.' },
@@ -60,6 +67,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
     if (ind.birth?.parsedDate?.year) {
       timelineEvents.push({
         year: ind.birth.parsedDate.year,
+        sortKey: dateKey(ind.birth.parsedDate),
         dateStr: ind.birth.date || `${ind.birth.parsedDate.year}`,
         type: 'birth',
         personId: ind.id,
@@ -67,12 +75,14 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
         place: ind.birth.place,
         description: `Naissance de ${ind.name}`,
         relation: relationOf(ind.id),
+        depth: depths?.get(ind.id),
       });
     }
 
     if (ind.death?.parsedDate?.year) {
       timelineEvents.push({
         year: ind.death.parsedDate.year,
+        sortKey: dateKey(ind.death.parsedDate),
         dateStr: ind.death.date || `${ind.death.parsedDate.year}`,
         type: 'death',
         personId: ind.id,
@@ -81,6 +91,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
         description: `Décès de ${ind.name}`,
         relation: relationOf(ind.id),
         age: ageAtDeath(ind),
+        depth: depths?.get(ind.id),
       });
     }
   }
@@ -94,12 +105,18 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
       const names = [husb?.name, wife?.name].filter(Boolean).join(' et ');
       timelineEvents.push({
         year: fam.marriage.parsedDate.year,
+        sortKey: dateKey(fam.marriage.parsedDate),
         dateStr: fam.marriage.date || `${fam.marriage.parsedDate.year}`,
         type: 'marriage',
         personId: husb?.id || wife?.id,
         personName: names,
         place: fam.marriage.place,
         description: `Mariage : ${names}`,
+        // Génération du conjoint de la lignée le plus proche de la personne
+        depth: [fam.husbandId, fam.wifeId]
+          .map(id => (id ? depths?.get(id) : undefined))
+          .filter((d): d is number => d !== undefined)
+          .sort((a, b) => Math.abs(a) - Math.abs(b))[0],
       });
     }
   }
@@ -112,6 +129,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
     if (depths && (familyYears.length === 0 || hist.year < minYear || hist.year > maxYear)) continue;
     timelineEvents.push({
       year: hist.year,
+      sortKey: dateKey({ year: hist.year }),
       dateStr: `${hist.year}`,
       type: 'historical',
       personName: hist.title,
@@ -119,7 +137,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
     });
   }
 
-  timelineEvents.sort((a, b) => a.year - b.year);
+  timelineEvents.sort((a, b) => a.sortKey - b.sortKey);
 
   const filteredEvents = timelineEvents.filter(e => {
     if (filterType === 'all') return true;
@@ -128,9 +146,15 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
     return e.type === filterType;
   });
 
+  // Centrée sur la personne : générations de la plus proche à la plus lointaine, chacune dans l'ordre des dates.
+  // « Tout l'arbre » reste une liste unique du plus ancien au plus récent.
+  const sections: Array<{ depth: number | null; events: TimelineEvent[] }> = depths
+    ? groupByGeneration(filteredEvents).map(g => ({ depth: g.depth, events: g.items }))
+    : [{ depth: null, events: filteredEvents }];
+
   return (
     <div className="max-w-4xl mx-auto px-4 md:px-8 py-8 space-y-6">
-      
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200/80 pb-4">
         <div>
@@ -142,9 +166,9 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
           </h1>
           <p className="text-xs text-stone-600 mt-0.5">
             {effectiveScope === 'ascendants'
-              ? `${person?.name} et ses ascendants (${(depths?.size || 1) - 1}), en regard des grands événements de l'Histoire de France.`
+              ? `${person?.name} et ses ascendants (${(depths?.size || 1) - 1}), génération par génération en partant des parents, en regard des grands événements de l'Histoire de France.`
               : effectiveScope === 'descendants'
-                ? `${person?.name} et ses descendants (${(depths?.size || 1) - 1}), en regard des grands événements de l'Histoire de France.`
+                ? `${person?.name} et ses descendants (${(depths?.size || 1) - 1}), génération par génération en partant des enfants, en regard des grands événements de l'Histoire de France.`
                 : 'Retracez les naissances, mariages et disparitions en regard des grands événements de l\'Histoire de France.'}
           </p>
         </div>
@@ -196,84 +220,122 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
         </div>
       </div>
 
+      {/* Point de départ : la chronologie s'organise autour de cette personne */}
+      {person && effectiveScope !== 'all' && (
+        <button
+          type="button"
+          onClick={() => onSelectPerson(person.id)}
+          className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-amber-800 bg-amber-50 text-left hover:bg-amber-100 transition-colors cursor-pointer"
+          title={`Ouvrir la fiche de ${person.name}`}
+        >
+          <span className="w-10 h-10 rounded-full bg-amber-900 text-white font-serif font-bold text-lg flex items-center justify-center shrink-0">
+            {person.givenName?.[0] || person.name[0]}
+          </span>
+          <span className="min-w-0">
+            <span className="block text-[10px] uppercase tracking-widest font-mono text-amber-800">
+              Point de départ · {effectiveScope === 'ascendants' ? 'on remonte vers les ancêtres' : 'on avance vers la descendance'}
+            </span>
+            <span className="block font-serif text-lg font-bold text-stone-900 truncate">{person.name}</span>
+            <span className="block text-xs text-stone-600">
+              {person.birth?.date ? `° ${person.birth.date}` : 'Date de naissance non renseignée'}
+              {person.death?.date ? ` · + ${person.death.date}` : ''}
+            </span>
+          </span>
+          {effectiveScope === 'ascendants'
+            ? <ArrowUp className="w-5 h-5 text-amber-800 ml-auto shrink-0" />
+            : <ArrowDown className="w-5 h-5 text-amber-800 ml-auto shrink-0" />}
+        </button>
+      )}
+
       {/* Vertical Timeline */}
       {filteredEvents.length === 0 ? (
         <div className="p-8 text-center bg-white border border-dashed border-stone-200 rounded-2xl text-xs text-stone-500">
           Aucun événement familial à afficher pour le moment. L'arbre est vierge ou aucun événement ne correspond à ce filtre.
         </div>
       ) : (
-        <div className="relative pl-6 md:pl-8 border-l-2 border-stone-300/80 space-y-6 py-2">
-          {filteredEvents.map((event, idx) => {
-          const isHistorical = event.type === 'historical';
+        sections.map(section => (
+        <section key={section.depth ?? 'all'} className="space-y-3">
+          {section.depth !== null && (
+            <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-amber-900">
+              <span className="px-2 py-0.5 rounded bg-amber-100 font-mono">{section.depth === 0 ? '0' : section.depth > 0 ? `+${section.depth}` : section.depth}</span>
+              <span>{generationTitle(section.depth)}</span>
+              <span className="flex-1 h-px bg-amber-200" />
+            </h2>
+          )}
+          <div className="relative pl-6 md:pl-8 border-l-2 border-stone-300/80 space-y-6 py-2">
+            {section.events.map((event, idx) => {
+            const isHistorical = event.type === 'historical';
 
-          return (
-            <div key={idx} className="relative group">
-              {/* Timeline marker node */}
-              <div
-                className={`absolute -left-[31px] md:-left-[39px] top-1.5 w-4 h-4 rounded-full border-2 bg-white transition-transform group-hover:scale-125 ${
-                  isHistorical
-                    ? 'border-amber-700 bg-amber-50'
-                    : event.type === 'birth'
-                      ? 'border-emerald-600'
-                      : event.type === 'marriage'
-                        ? 'border-amber-600'
-                        : 'border-rose-600'
-                }`}
-              />
+            return (
+              <div key={idx} className="relative group">
+                {/* Timeline marker node */}
+                <div
+                  className={`absolute -left-[31px] md:-left-[39px] top-1.5 w-4 h-4 rounded-full border-2 bg-white transition-transform group-hover:scale-125 ${
+                    isHistorical
+                      ? 'border-amber-700 bg-amber-50'
+                      : event.type === 'birth'
+                        ? 'border-emerald-600'
+                        : event.type === 'marriage'
+                          ? 'border-amber-600'
+                          : 'border-rose-600'
+                  }`}
+                />
 
-              {/* Event card */}
-              <div
-                onClick={() => event.personId && onSelectPerson(event.personId)}
-                className={`p-4 rounded-xl border transition-all text-left ${
-                  isHistorical
-                    ? 'bg-amber-50/60 border-amber-200/80 shadow-2xs'
-                    : 'bg-white border-stone-200 hover:border-amber-700 hover:bg-stone-50/60 cursor-pointer shadow-xs'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs font-bold text-stone-900">
-                    {event.dateStr}
-                  </span>
+                {/* Event card */}
+                <div
+                  onClick={() => event.personId && onSelectPerson(event.personId)}
+                  className={`p-4 rounded-xl border transition-all text-left ${
+                    isHistorical
+                      ? 'bg-amber-50/60 border-amber-200/80 shadow-2xs'
+                      : 'bg-white border-stone-200 hover:border-amber-700 hover:bg-stone-50/60 cursor-pointer shadow-xs'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-xs font-bold text-stone-900">
+                      {event.dateStr}
+                    </span>
 
-                  <span
-                    className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded ${
-                      isHistorical
-                        ? 'bg-amber-100 text-amber-950 font-semibold'
-                        : event.type === 'birth'
-                          ? 'bg-emerald-50 text-emerald-800'
-                          : event.type === 'marriage'
-                            ? 'bg-amber-50 text-amber-800'
-                            : 'bg-rose-50 text-rose-800'
-                    }`}
-                  >
-                    {isHistorical ? 'Événement Historique' : event.type === 'birth' ? 'Naissance' : event.type === 'marriage' ? 'Mariage' : 'Décès'}
-                  </span>
-                </div>
+                    <span
+                      className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded ${
+                        isHistorical
+                          ? 'bg-amber-100 text-amber-950 font-semibold'
+                          : event.type === 'birth'
+                            ? 'bg-emerald-50 text-emerald-800'
+                            : event.type === 'marriage'
+                              ? 'bg-amber-50 text-amber-800'
+                              : 'bg-rose-50 text-rose-800'
+                      }`}
+                    >
+                      {isHistorical ? 'Événement Historique' : event.type === 'birth' ? 'Naissance' : event.type === 'marriage' ? 'Mariage' : 'Décès'}
+                    </span>
+                  </div>
 
-                <h3 className="font-serif text-sm font-bold text-stone-900 mt-1">
-                  {event.description}
-                  {event.age && (
-                    <span className="font-sans font-semibold text-rose-800"> · {event.age}</span>
+                  <h3 className="font-serif text-sm font-bold text-stone-900 mt-1">
+                    {event.description}
+                    {event.age && (
+                      <span className="font-sans font-semibold text-rose-800"> · {event.age}</span>
+                    )}
+                  </h3>
+
+                  {event.relation && (
+                    <span className="inline-block mt-1 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">
+                      {event.relation}
+                    </span>
                   )}
-                </h3>
 
-                {event.relation && (
-                  <span className="inline-block mt-1 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">
-                    {event.relation}
-                  </span>
-                )}
-
-                {event.place && (
-                  <p className="text-xs text-stone-500 flex items-center gap-1 mt-1">
-                    <MapPin className="w-3 h-3 text-stone-400" />
-                    <span>{event.place}</span>
-                  </p>
-                )}
+                  {event.place && (
+                    <p className="text-xs text-stone-500 flex items-center gap-1 mt-1">
+                      <MapPin className="w-3 h-3 text-stone-400" />
+                      <span>{event.place}</span>
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+          </div>
+        </section>
+        ))
       )}
 
     </div>

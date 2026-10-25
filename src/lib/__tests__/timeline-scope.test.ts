@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseGedcom, parseGedcomDate } from '../gedcom-parser';
-import { getLineageDepths, relationLabel, ageAtDeath } from '../timeline-scope';
+import { getLineageDepths, relationLabel, ageAtDeath, groupByGeneration, generationTitle } from '../timeline-scope';
 import { Individual } from '../../types/genealogy';
 
 const lived = (birth?: string, death?: string): Individual => ({
@@ -99,5 +99,31 @@ describe('Chronologie depuis une fiche (ascendants / descendants)', () => {
     expect(ageAtDeath(lived('BEF 1800', '1850'))).toBeUndefined();
     expect(ageAtDeath(lived('1905', 'BET 1980 AND 1985'))).toBeUndefined();
     expect(ageAtDeath(lived('1950', '1900'))).toBeUndefined();
+  });
+
+  it('organise la chronologie par génération, de la plus proche à la plus lointaine', () => {
+    const items = [
+      { id: 'arriere', year: 1720, sortKey: 17200000, depth: 3 },
+      { id: 'parent-deces', year: 2016, sortKey: 20160422, depth: 1 },
+      { id: 'grand-parent', year: 1905, sortKey: 19051116, depth: 2 },
+      { id: 'parent-naissance', year: 1940, sortKey: 19400419, depth: 1 },
+      { id: 'revolution', year: 1789, sortKey: 17890000 },
+      { id: 'guerre-1914', year: 1914, sortKey: 19140000 },
+    ];
+    const groups = groupByGeneration(items);
+    expect(groups.map(g => g.depth)).toEqual([1, 2, 3]);
+    expect(groups[0].items.map(i => i.id)).toEqual(['parent-naissance', 'parent-deces']);
+    // 1914 rejoint la génération la plus proche qui couvre cette période (grands-parents, ± 10 ans)
+    expect(groups[1].items.map(i => i.id)).toEqual(['grand-parent', 'guerre-1914']);
+    // 1789 ne correspond à aucune génération présente : écarté
+    expect(groups.flatMap(g => g.items).some(i => i.id === 'revolution')).toBe(false);
+  });
+
+  it('nomme les générations dans les deux sens', () => {
+    expect(generationTitle(1)).toBe('Parents');
+    expect(generationTitle(2)).toBe('Grands-parents');
+    expect(generationTitle(6)).toBe('Ancêtres · 6e génération');
+    expect(generationTitle(-1)).toBe('Enfants');
+    expect(generationTitle(-2)).toBe('Petits-enfants');
   });
 });

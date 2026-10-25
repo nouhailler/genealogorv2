@@ -3,6 +3,13 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.15.1] — 2026-10-25
+
+### 🧭 Modifié — Chronologie centrée sur la personne
+- En modes Ascendants / Descendants, la chronologie est organisée par génération, de la plus proche à la plus lointaine (Parents, Grands-parents… ou Enfants, Petits-enfants…), chaque génération dans l'ordre des dates ; elle ne commence plus par l'ancêtre le plus ancien.
+- Carte « Point de départ » en tête ; contexte historique rattaché à la génération qui couvre sa période.
+- `groupByGeneration` / `generationTitle` et 2 nouveaux tests — 198 tests au total.
+
 ## [2.15.0] — 2026-10-25
 
 ### 🎯 Ajouté — « Voir dans l'arbre » depuis une fiche
