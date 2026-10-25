@@ -3,6 +3,21 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.16.0] — 2026-10-25
+
+### 🗺️ Corrigé — Carte : lieux mal placés et carte qui partait en mer
+- **Géocodage** (`france-geocoding.ts`) : le dictionnaire acceptait des correspondances partielles (« Saint-Priest-les-Fougères » → Fougères en Ille-et-Vilaine, « Rilhac-Lastours » → Tours) et l'API pouvait renvoyer des homonymes d'outre-mer ; ces positions fausses étaient en plus gardées en cache. Désormais :
+  - décomposition du lieu (lieu-dit, commune, code, département) pour tous les formats rencontrés ;
+  - localisation par le **code INSEE ou postal** (geo.api.gouv.fr), puis par le nom dans le bon département (Base Adresse Nationale), avec vérification du nom ; OpenStreetMap pour l'étranger (« Bâle ») ;
+  - ancien cache supprimé. Sur l'arbre de référence : 82/82 lieux localisés dans le bon département (22 étaient faux).
+- **La carte ne saute plus** : la sélection d'une commune ne recadre plus toute la carte (le cadrage englobant un lieu faux plaçait le centre en mer).
+
+### ✨ Amélioré — Carte plus claire
+- Un **cercle par commune**, proportionnel au nombre d'actes, regroupant graphies et lieux-dits (42 communes au lieu de 82 étiquettes superposées) ; nom au survol et sur la commune sélectionnée.
+- Fiche de la commune : lieux-dits, actes triés par date avec leur type, clic vers la fiche ; liste des communes par nombre d'actes ; lieux non localisés listés à part.
+- Fond « Clair » Esri par défaut (le fond CARTO exige désormais une clé), migrations en option, localisation en parallèle avec indicateur de progression, compteurs exacts.
+- 7 nouveaux tests (`france-geocoding.test.ts`) — 205 tests au total.
+
 ## [2.15.1] — 2026-10-25
 
 ### 🧭 Modifié — Chronologie centrée sur la personne

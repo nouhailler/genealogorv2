@@ -77,10 +77,11 @@ const GUIDES_DATA: Record<ActiveTab, GuideContent> = {
     title: 'Cartographie des Migrations & Lieux de Vie',
     badge: 'Dispersion géographique',
     icon: <MapPin className="w-4 h-4 text-amber-700 dark:text-amber-400" />,
-    summary: 'Visualisez la dispersion géographique des paroisses et communes où vos ancêtres sont nés, se sont mariés et sont décédés.',
+    summary: 'Chaque cercle est une commune où vos ancêtres sont nés, se sont mariés ou sont décédés ; plus il est grand, plus elle compte d\'actes.',
     tips: [
-      { label: 'Parcours des lignées', text: 'Les lignes relient les lieux de vie pour matérialiser les mouvements migratoires au fil des siècles.' },
-      { label: 'Communes françaises', text: 'Support complet des toponymes anciens et départements historiques.' }
+      { label: 'Explorer', text: 'Touchez un cercle ou une commune de la liste : ses actes et lieux-dits s\'affichent, un clic ouvre la fiche.' },
+      { label: 'Localisation', text: 'Les lieux sont situés par leur code INSEE ou postal, sinon par leur nom ; les variantes et lieux-dits sont regroupés par commune.' },
+      { label: 'Migrations', text: 'Cochez « Migrations père → enfant » pour relier le lieu de naissance d\'un père à celui de ses enfants.' }
     ]
   },
   stats: {

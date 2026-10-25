@@ -3,10 +3,14 @@
  * optimisé pour la généalogie française (paroisses, communes, départements).
  */
 
+import { extractDept, deptName, region as deptRegion, normalize as normalizeName } from './place-gazetteer';
+
 export interface GeoCoordinates {
   lat: number;
   lng: number;
   source?: 'dictionary' | 'cache' | 'osm_api';
+  /** Nom officiel de la commune trouvée (ex. « Saint-Pierre-de-Frugie » pour le lieu-dit « Verdenille, 24486 ») */
+  name?: string;
   department?: string;
   region?: string;
 }
@@ -122,12 +126,15 @@ const KNOWN_FRENCH_PLACES: Record<string, GeoCoordinates> = {
   'bastia': { lat: 42.6973, lng: 9.4509, department: 'Haute-Corse', region: 'Corse' },
 };
 
-// Cache en mémoire et local
-const GEOCACHE_STORAGE_KEY = 'genealogor_geocache_v2';
+// Cache local des résultats de géocodage, indexé par lieu complet (le résultat dépend du code et du département).
+// La version 2 contenait des positions fausses (correspondances partielles, homonymes d'outre-mer) : elle est abandonnée.
+const GEOCACHE_STORAGE_KEY = 'genealogor_geocache_v3';
+const LEGACY_GEOCACHE_KEYS = ['genealogor_geocache_v2'];
 
 function getPersistentCache(): Record<string, GeoCoordinates> {
   if (typeof localStorage === 'undefined') return {};
   try {
+    for (const key of LEGACY_GEOCACHE_KEYS) localStorage.removeItem(key);
     const raw = localStorage.getItem(GEOCACHE_STORAGE_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch (e) {
@@ -152,115 +159,246 @@ export function normalizePlaceKey(place: string): string {
   return place
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
 }
 
-/**
- * Extrait le nom de la commune principale depuis une chaîne de lieu généalogique.
- * Ex: "Cancale, Ille-et-Vilaine, Bretagne, France" -> "Cancale"
- */
-export function extractCommuneName(rawPlace: string): string {
-  if (!rawPlace) return '';
-  const firstPart = rawPlace.split(',')[0].trim();
-  // Retirer les codes postaux initiaux (ex: "35400 Saint-Malo" -> "Saint-Malo")
-  return firstPart.replace(/^[0-9]{4,5}\s+/, '').trim();
+export interface ParsedPlace {
+  /** Commune (sans lieu-dit ni code) */
+  commune: string;
+  /** Lieu-dit ou hameau éventuel (« Bas Ribeyreix - Saint-Priest… », « Curmont, La Coquille, … ») */
+  hamlet?: string;
+  /** Code à 5 chiffres présent dans le lieu : code INSEE (Geneanet, Heredis) ou code postal */
+  code?: string;
+  /** Code département déduit du code ou du nom de département */
+  deptCode?: string;
+}
+
+const CODE_RE = /^(\d{5}|2[AB]\d{3})$/i;
+
+// Régions (actuelles et d'avant 2016) et pays, qui ne sont jamais la commune
+const NON_COMMUNE_PARTS = new Set([
+  'france', 'aquitaine', 'nouvelle aquitaine', 'limousin', 'poitou charentes', 'pays de la loire',
+  'ile de france', 'rhone alpes', 'auvergne rhone alpes', 'auvergne', 'lorraine', 'alsace', 'grand est',
+  'champagne ardenne', 'bretagne', 'normandie', 'basse normandie', 'haute normandie', 'centre',
+  'centre val de loire', 'bourgogne', 'franche comte', 'bourgogne franche comte', 'midi pyrenees',
+  'languedoc roussillon', 'occitanie', 'provence alpes cote d azur', 'paca', 'corse', 'picardie',
+  'nord pas de calais', 'hauts de france',
+]);
+
+/** La partie est-elle un nom de département, de région ou le pays (et non une commune) ? */
+function isAdministrativePart(part: string): boolean {
+  const n = normalizeName(part);
+  if (NON_COMMUNE_PARTS.has(n)) return true;
+  const dept = extractDept(part);
+  return Boolean(dept && !/\d/.test(part) && normalizeName(deptName(dept) || '') === n);
 }
 
 /**
- * Tente de résoudre les coordonnées GPS d'un lieu français de façon synchrone.
+ * Décompose un lieu généalogique. Formats rencontrés :
+ * « Commune, 24489, Dordogne, Aquitaine, France », « Lieu-dit - Commune, 24489, … »,
+ * « Lieu-dit, Commune, 24133, … », « 35400 Saint-Malo », « Commune » seule.
+ */
+export function parsePlace(raw: string): ParsedPlace {
+  const parts = (raw || '').split(',').map(p => p.trim()).filter(Boolean);
+  const codeIdx = parts.findIndex(p => CODE_RE.test(p));
+  let hamlet: string | undefined;
+  // Avec un code, la commune le précède ; sans code, c'est le dernier nom qui n'est ni département,
+  // ni région, ni pays (« Lieu-dit, Commune, France »)
+  const named = codeIdx >= 0 ? parts.slice(0, codeIdx) : parts.filter(p => !isAdministrativePart(p));
+  let communePart = named[named.length - 1] || parts[0] || '';
+  if (named.length > 1) hamlet = named.slice(0, -1).join(', ');
+
+  // Code postal en tête (« 35400 Saint-Malo »)
+  let code = codeIdx >= 0 ? parts[codeIdx].toUpperCase() : undefined;
+  const leading = communePart.match(/^(\d{5})\s+(.+)$/);
+  if (leading) {
+    code = code || leading[1];
+    communePart = leading[2];
+  }
+
+  // « Lieu-dit - Commune »
+  const dash = communePart.split(/\s+-\s+/);
+  if (dash.length > 1) {
+    hamlet = [hamlet, dash.slice(0, -1).join(' - ')].filter(Boolean).join(', ');
+    communePart = dash[dash.length - 1];
+  }
+
+  return {
+    commune: communePart.replace(/\s+-\s*|\s*-\s+/g, '-').replace(/\s+/g, ' ').trim(),
+    hamlet: hamlet || undefined,
+    code,
+    deptCode: extractDept(raw) || undefined,
+  };
+}
+
+/**
+ * Extrait le nom de la commune principale depuis une chaîne de lieu généalogique.
+ * Ex: "Bas Ribeyreix - Saint-Priest-les-Fougères, 24489, Dordogne" -> "Saint-Priest-les-Fougères"
+ */
+export function extractCommuneName(rawPlace: string): string {
+  return parsePlace(rawPlace).commune;
+}
+
+/**
+ * Le nom renvoyé par un géocodeur correspond-il au lieu demandé ? Égalité (accents, tirets et casse ignorés),
+ * ou suite de mots du lieu (« la tuillerie de babaud saint priest ligoure » → Saint-Priest-Ligoure),
+ * mais jamais un morceau d'un nom composé (« Saint-Priest-les-Fougères » n'est pas « Fougères »).
+ */
+export function placeNameMatches(query: string, resultName: string): boolean {
+  const target = normalizeName(resultName);
+  if (!target || !normalizeName(query)) return false;
+  // Mots du lieu, en gardant les noms composés (reliés par des tirets) d'un seul tenant
+  const words = (query || '').trim().split(/\s+/).filter(w => w && w !== '-');
+  for (let start = 0; start < words.length; start++) {
+    for (let end = start + 1; end <= words.length; end++) {
+      if (normalizeName(words.slice(start, end).join(' ')) === target) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Tente de résoudre les coordonnées GPS d'un lieu de façon synchrone (cache, puis dictionnaire).
+ * Le dictionnaire n'est utilisé que sur un nom de commune exact, et jamais s'il contredit le département.
  */
 export function resolveFrenchPlaceSync(placeString: string): GeoCoordinates | null {
   if (!placeString) return null;
 
-  const commune = extractCommuneName(placeString);
-  const normalizedCommune = normalizePlaceKey(commune);
-  const normalizedFull = normalizePlaceKey(placeString);
+  const cache = getPersistentCache();
+  const cacheKey = normalizePlaceKey(placeString);
+  if (cache[cacheKey]) return { ...cache[cacheKey], source: 'cache' };
 
-  // 1. Dictionnaire local direct
-  if (KNOWN_FRENCH_PLACES[normalizedCommune]) {
-    return { ...KNOWN_FRENCH_PLACES[normalizedCommune], source: 'dictionary' };
-  }
-  if (KNOWN_FRENCH_PLACES[normalizedFull]) {
-    return { ...KNOWN_FRENCH_PLACES[normalizedFull], source: 'dictionary' };
-  }
-
-  // 2. Recherche partielle dans les clés du dictionnaire
-  for (const [key, coords] of Object.entries(KNOWN_FRENCH_PLACES)) {
-    if (normalizedCommune.includes(key) || key.includes(normalizedCommune)) {
-      return { ...coords, source: 'dictionary' };
+  const { commune, deptCode } = parsePlace(placeString);
+  const known = KNOWN_FRENCH_PLACES[normalizePlaceKey(commune)];
+  if (known) {
+    const expectedDept = deptCode ? deptName(deptCode) : null;
+    if (!expectedDept || normalizeName(expectedDept) === normalizeName(known.department || '')) {
+      // Graphie de l'arbre, avec majuscules si elle est tout en minuscules (« lyon » → « Lyon »)
+      const name = commune === commune.toLowerCase()
+        ? commune.replace(/(^|[\s-])(\p{L})/gu, (_, sep, letter) => sep + letter.toUpperCase())
+        : commune;
+      return { ...known, name: known.name || name, source: 'dictionary' };
     }
   }
-
-  // 3. Cache persistant local
-  const cache = getPersistentCache();
-  if (cache[normalizedCommune]) {
-    return { ...cache[normalizedCommune], source: 'cache' };
-  }
-  if (cache[normalizedFull]) {
-    return { ...cache[normalizedFull], source: 'cache' };
-  }
-
   return null;
 }
 
+interface AdresseFeature {
+  geometry: { coordinates: [number, number] };
+  properties: { name?: string; city?: string; citycode?: string; postcode?: string; score?: number };
+}
+
+async function searchAdresse(params: Record<string, string>): Promise<AdresseFeature[]> {
+  const query = new URLSearchParams({ type: 'municipality', limit: '5', ...params });
+  const res = await fetch(`https://api-adresse.data.gouv.fr/search/?${query.toString()}`, {
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data.features) ? data.features : [];
+}
+
+function fromFeature(feature: AdresseFeature): GeoCoordinates {
+  const [lng, lat] = feature.geometry.coordinates;
+  const citycode = feature.properties.citycode || '';
+  const dept = citycode.startsWith('97') ? citycode.slice(0, 3) : citycode.slice(0, 2);
+  return {
+    lat,
+    lng,
+    source: 'osm_api',
+    name: feature.properties.name,
+    department: deptName(dept) || undefined,
+    region: deptRegion(dept) || undefined,
+  };
+}
+
+interface GeoCommune {
+  nom: string;
+  code: string;
+  codeDepartement?: string;
+  centre?: { coordinates: [number, number] };
+}
+
+/** API Découpage administratif (geo.api.gouv.fr) : communes par code INSEE ou par code postal */
+async function fetchGeoCommunes(path: string): Promise<GeoCommune[]> {
+  const sep = path.includes('?') ? '&' : '?';
+  const res = await fetch(`https://geo.api.gouv.fr/${path}${sep}fields=nom,code,codeDepartement,centre`, {
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  const list: GeoCommune[] = Array.isArray(data) ? data : [data];
+  return list.filter(c => c && c.centre?.coordinates);
+}
+
+function fromGeoCommune(c: GeoCommune): GeoCoordinates {
+  const [lng, lat] = c.centre!.coordinates;
+  const dept = c.codeDepartement || c.code.slice(0, c.code.startsWith('97') ? 3 : 2);
+  return { lat, lng, source: 'osm_api', name: c.nom, department: deptName(dept) || undefined, region: deptRegion(dept) || undefined };
+}
+
 /**
- * Résout les coordonnées géographiques d'un lieu de façon asynchrone avec fallback
- * sur l'API publique de géocodage officielle française (data.gouv.fr) ou OpenStreetMap Nominatim.
+ * Résout les coordonnées géographiques d'un lieu de façon asynchrone :
+ *  1. par le code présent dans le lieu (code INSEE ou code postal, geo.api.gouv.fr) ;
+ *  2. par le nom de commune (Base Adresse Nationale), dans le département s'il est connu ;
+ *  3. à défaut, OpenStreetMap Nominatim (lieux hors de France compris, ex. « Bâle »).
  */
 export async function resolveFrenchPlaceAsync(placeString: string): Promise<GeoCoordinates | null> {
   const syncMatch = resolveFrenchPlaceSync(placeString);
   if (syncMatch) return syncMatch;
 
-  const commune = extractCommuneName(placeString);
-  const normalizedCommune = normalizePlaceKey(commune);
+  const { commune, code, deptCode } = parsePlace(placeString);
+  if (!commune) return null;
+  const cacheKey = normalizePlaceKey(placeString);
+  const remember = (coords: GeoCoordinates) => {
+    savePersistentCache(cacheKey, coords);
+    return coords;
+  };
 
   try {
-    // 1. Tentative avec l'API publique et libre de l'État Français (base adresses nationales)
-    const gouvUrl = `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(commune + ' France')}&limit=1`;
-    const res = await fetch(gouvUrl, { headers: { Accept: 'application/json' } });
-    if (res.ok) {
-      const data = await res.json();
-      const feature = data.features?.[0];
-      if (feature && feature.geometry && feature.geometry.coordinates) {
-        const [lng, lat] = feature.geometry.coordinates;
-        const coords: GeoCoordinates = {
-          lat,
-          lng,
-          source: 'osm_api',
-          department: feature.properties?.context?.split(',')?.[1]?.trim(),
-          region: feature.properties?.context?.split(',')?.[2]?.trim(),
-        };
-        savePersistentCache(normalizedCommune, coords);
-        return coords;
-      }
+    if (code) {
+      // Le code désigne la commune même si le nom est mal orthographié ou si c'est un lieu-dit.
+      // Un même nombre peut être le code INSEE d'une commune et le code postal d'une autre :
+      // on préfère la commune dont le nom correspond, puis la commune du code INSEE.
+      const [byInsee, byPostcode] = await Promise.all([
+        fetchGeoCommunes(`communes/${encodeURIComponent(code)}`),
+        fetchGeoCommunes(`communes?codePostal=${encodeURIComponent(code)}`),
+      ]);
+      const named = [...byInsee, ...byPostcode].find(c => placeNameMatches(commune, c.nom));
+      const chosen = named || byInsee[0] || (byPostcode.length === 1 ? byPostcode[0] : undefined);
+      if (chosen) return remember(fromGeoCommune(chosen));
     }
+
+    const byName = await searchAdresse({ q: commune });
+    const candidates = byName.filter(f =>
+      placeNameMatches(commune, f.properties.name || '') &&
+      (!deptCode || (f.properties.citycode || '').startsWith(deptCode))
+    );
+    // Sans département connu, on évite les homonymes d'outre-mer
+    const best = candidates.find(f => deptCode || !(f.properties.citycode || '').startsWith('97')) || candidates[0];
+    if (best) return remember(fromFeature(best));
   } catch (e) {
-    // Fallback silencieux en cas de mode hors ligne ou d'échec réseau
+    // Hors ligne ou API indisponible : on tente Nominatim
   }
 
-  // 2. Fallback Nominatim OpenStreetMap
   try {
-    const osmUrl = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=fr&q=${encodeURIComponent(commune)}&limit=1`;
-    const resOsm = await fetch(osmUrl, {
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Genealogor-App/2.0 (genealogor@genealogor.app)'
-      }
+    const dept = deptCode ? deptName(deptCode) : null;
+    const params = new URLSearchParams({ format: 'json', limit: '1', q: dept ? `${commune}, ${dept}` : commune });
+    if (dept) params.set('countrycodes', 'fr');
+    const resOsm = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+      headers: { Accept: 'application/json' },
     });
     if (resOsm.ok) {
       const dataOsm = await resOsm.json();
-      if (Array.isArray(dataOsm) && dataOsm.length > 0) {
-        const first = dataOsm[0];
-        const lat = parseFloat(first.lat);
-        const lng = parseFloat(first.lon);
-        if (!isNaN(lat) && !isNaN(lng)) {
-          const coords: GeoCoordinates = { lat, lng, source: 'osm_api' };
-          savePersistentCache(normalizedCommune, coords);
-          return coords;
-        }
+      const first = Array.isArray(dataOsm) ? dataOsm[0] : null;
+      const lat = first ? parseFloat(first.lat) : NaN;
+      const lng = first ? parseFloat(first.lon) : NaN;
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const osmName = typeof first.display_name === 'string' ? first.display_name.split(',')[0].trim() : undefined;
+        return remember({ lat, lng, source: 'osm_api', name: osmName, department: dept || undefined });
       }
     }
   } catch (e) {}

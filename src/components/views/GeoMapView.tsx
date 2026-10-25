@@ -1,16 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { 
-  MapPin, Users, Calendar, Building, ChevronRight, Layers, 
-  ZoomIn, ZoomOut, Compass, Search, Filter, Route, Sparkles, Eye
-} from 'lucide-react';
+import { MapPin, Search, Compass, Route, ChevronRight, Loader2, Baby, Heart, Cross, X } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { GenealogyData, Individual } from '../../types/genealogy';
-import { 
-  resolveFrenchPlaceSync, 
-  resolveFrenchPlaceAsync, 
-  extractCommuneName, 
-  GeoCoordinates 
+import { GenealogyData } from '../../types/genealogy';
+import { normalize as normalizeName } from '../../lib/place-gazetteer';
+import {
+  resolveFrenchPlaceSync,
+  resolveFrenchPlaceAsync,
+  parsePlace,
+  GeoCoordinates,
 } from '../../lib/france-geocoding';
 
 interface GeoMapViewProps {
@@ -18,509 +16,347 @@ interface GeoMapViewProps {
   onSelectPerson: (id: string) => void;
 }
 
+type EventType = 'birth' | 'marriage' | 'death';
+type FilterType = 'all' | EventType;
+type MapTileStyle = 'positron' | 'osm' | 'topo';
+
 export interface PlaceEvent {
-  type: 'birth' | 'marriage' | 'death';
+  type: EventType;
   personName: string;
   personId: string;
   year?: number;
   rawDate?: string;
+  /** Lieu tel qu'écrit dans l'arbre */
+  rawPlace: string;
+  /** Lieu-dit éventuel (« Bas Ribeyreix ») */
+  hamlet?: string;
 }
 
-export interface PlaceSummary {
+/** Commune localisée regroupant toutes les graphies et lieux-dits qui y renvoient */
+interface Site {
+  key: string;
   name: string;
-  commune: string;
-  count: number;
+  department?: string;
+  coords: GeoCoordinates;
+  hamlets: string[];
   events: PlaceEvent[];
-  coords?: GeoCoordinates;
 }
 
-type MapTileStyle = 'osm' | 'positron' | 'topo';
-
-const TILE_LAYERS: Record<MapTileStyle, { url: string; attribution: string; maxZoom: number; label: string }> = {
+const TILE_LAYERS: Record<MapTileStyle, { url: string; overlayUrl?: string; attribution: string; maxZoom: number; label: string }> = {
+  // Fond gris clair Esri (sans clé) : les cercles ressortent ; noms de lieux sur une couche séparée.
+  // (Le fond clair CARTO exige désormais une clé d'API.)
+  positron: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    overlayUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Fond &copy; Esri, HERE, Garmin, &copy; contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 16,
+    label: 'Clair',
+  },
   osm: {
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributeurs',
     maxZoom: 19,
-    label: 'OpenStreetMap Standard',
-  },
-  positron: {
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    maxZoom: 19,
-    label: 'Fond Clair (CartoDB)',
+    label: 'Standard',
   },
   topo: {
     url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
     attribution: 'Données &copy; <a href="https://openstreetmap.org/copyright">OSM</a>, SRTM | Rendu &copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
     maxZoom: 17,
-    label: 'Relief Topographique',
+    label: 'Relief',
   },
 };
 
+const FRANCE_CENTER: [number, number] = [46.603354, 1.888334];
+
+const EVENT_LABELS: Record<EventType, { label: string; plural: string; icon: React.ElementType; badge: string }> = {
+  birth: { label: 'Naissance', plural: 'Naissances', icon: Baby, badge: 'bg-emerald-100 text-emerald-900' },
+  marriage: { label: 'Mariage', plural: 'Mariages', icon: Heart, badge: 'bg-amber-100 text-amber-900' },
+  death: { label: 'Décès', plural: 'Décès', icon: Cross, badge: 'bg-rose-100 text-rose-900' },
+};
+
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+
+/** Point arrondi (≈ 100 m) */
+const coordKey = (c: GeoCoordinates) => `${c.lat.toFixed(3)},${c.lng.toFixed(3)}`;
+
+/**
+ * Clé de regroupement d'une commune : nom officiel et département quand on les connaît
+ * (les sources donnent des points légèrement différents pour une même commune), sinon le point.
+ */
+const siteKey = (c: GeoCoordinates) =>
+  c.name ? `${normalizeName(c.name)}|${normalizeName(c.department || '')}` : coordKey(c);
+
+const GEOCODING_CONCURRENCY = 6;
+
 export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const migrationLayerRef = useRef<L.LayerGroup | null>(null);
-  const currentTileLayerRef = useRef<L.TileLayer | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const tileOverlayRef = useRef<L.TileLayer | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
 
-  const [selectedPlaceName, setSelectedPlaceName] = useState<string>('');
-  const [tileStyle, setTileStyle] = useState<MapTileStyle>('osm');
-  const [filterType, setFilterType] = useState<'all' | 'birth' | 'marriage' | 'death'>('all');
+  const [selectedKey, setSelectedKey] = useState<string>('');
+  const [tileStyle, setTileStyle] = useState<MapTileStyle>('positron');
+  const [filterType, setFilterType] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showMigrations, setShowMigrations] = useState(true);
-  const [geocodedPlaces, setGeocodedPlaces] = useState<Record<string, GeoCoordinates>>({});
+  const [showMigrations, setShowMigrations] = useState(false);
+  /** Coordonnées par lieu brut ; null = recherché sans succès */
+  const [geocoded, setGeocoded] = useState<Record<string, GeoCoordinates | null>>({});
 
-  // 1. Extraction et consolidation des lieux de l'arbre
-  const placesMap = useMemo(() => {
-    const map: Record<string, PlaceSummary> = {};
-
-    // Naissances et décès des individus
+  // 1. Événements datés et localisés de l'arbre, par lieu tel qu'écrit
+  const eventsByRawPlace = useMemo(() => {
+    const map: Record<string, PlaceEvent[]> = {};
+    const add = (rawPlace: string | undefined, ev: Omit<PlaceEvent, 'rawPlace' | 'hamlet'>) => {
+      const place = rawPlace?.trim();
+      if (!place) return;
+      (map[place] ||= []).push({ ...ev, rawPlace: place, hamlet: parsePlace(place).hamlet });
+    };
     for (const ind of Object.values(data.individuals || {})) {
-      if (ind.birth?.place) {
-        const place = ind.birth.place.trim();
-        if (!map[place]) {
-          map[place] = {
-            name: place,
-            commune: extractCommuneName(place),
-            count: 0,
-            events: [],
-          };
-        }
-        map[place].count++;
-        map[place].events.push({
-          type: 'birth',
-          personName: ind.name,
-          personId: ind.id,
-          year: ind.birth.parsedDate?.year,
-          rawDate: ind.birth.date,
-        });
-      }
-
-      if (ind.death?.place) {
-        const place = ind.death.place.trim();
-        if (!map[place]) {
-          map[place] = {
-            name: place,
-            commune: extractCommuneName(place),
-            count: 0,
-            events: [],
-          };
-        }
-        map[place].count++;
-        map[place].events.push({
-          type: 'death',
-          personName: ind.name,
-          personId: ind.id,
-          year: ind.death.parsedDate?.year,
-          rawDate: ind.death.date,
-        });
-      }
+      add(ind.birth?.place, { type: 'birth', personName: ind.name, personId: ind.id, year: ind.birth?.parsedDate?.year, rawDate: ind.birth?.date });
+      add(ind.death?.place, { type: 'death', personName: ind.name, personId: ind.id, year: ind.death?.parsedDate?.year, rawDate: ind.death?.date });
     }
-
-    // Mariages dans les familles
     for (const fam of Object.values(data.families || {})) {
-      if (fam.marriage?.place) {
-        const place = fam.marriage.place.trim();
-        const husb = fam.husbandId ? data.individuals[fam.husbandId] : undefined;
-        const wife = fam.wifeId ? data.individuals[fam.wifeId] : undefined;
-        const names = [husb?.name, wife?.name].filter(Boolean).join(' & ');
-
-        if (!map[place]) {
-          map[place] = {
-            name: place,
-            commune: extractCommuneName(place),
-            count: 0,
-            events: [],
-          };
-        }
-        map[place].count++;
-        map[place].events.push({
-          type: 'marriage',
-          personName: names || 'Union familiale',
-          personId: husb?.id || wife?.id || '',
-          year: fam.marriage.parsedDate?.year,
-          rawDate: fam.marriage.date,
-        });
-      }
+      const husb = fam.husbandId ? data.individuals[fam.husbandId] : undefined;
+      const wife = fam.wifeId ? data.individuals[fam.wifeId] : undefined;
+      add(fam.marriage?.place, {
+        type: 'marriage',
+        personName: [husb?.name, wife?.name].filter(Boolean).join(' & ') || 'Union',
+        personId: husb?.id || wife?.id || '',
+        year: fam.marriage?.parsedDate?.year,
+        rawDate: fam.marriage?.date,
+      });
     }
-
     return map;
   }, [data]);
 
-  // 2. Résolution synchrone et asynchrone des coordonnées pour chaque lieu
+  const rawPlaces = useMemo(() => Object.keys(eventsByRawPlace), [eventsByRawPlace]);
+
+  // 2. Localisation : cache et dictionnaire immédiatement, puis API publiques (une requête à la fois)
   useEffect(() => {
-    let isMounted = true;
-    const initialCoords: Record<string, GeoCoordinates> = {};
-
-    // Résolution immédiate par dictionnaire local
-    for (const [placeName] of Object.entries(placesMap)) {
-      const syncCoord = resolveFrenchPlaceSync(placeName);
-      if (syncCoord) {
-        initialCoords[placeName] = syncCoord;
-      }
+    let cancelled = false;
+    const initial: Record<string, GeoCoordinates | null> = {};
+    for (const place of rawPlaces) {
+      const sync = resolveFrenchPlaceSync(place);
+      if (sync) initial[place] = sync;
     }
-    setGeocodedPlaces(prev => ({ ...prev, ...initialCoords }));
+    setGeocoded(initial);
 
-    // Résolution asynchrone pour les communes non trouvées
-    const asyncResolve = async () => {
-      for (const [placeName] of Object.entries(placesMap)) {
-        if (!initialCoords[placeName]) {
-          const asyncCoord = await resolveFrenchPlaceAsync(placeName);
-          if (asyncCoord && isMounted) {
-            setGeocodedPlaces(prev => ({ ...prev, [placeName]: asyncCoord }));
-          }
-        }
+    // Plusieurs requêtes en parallèle, en nombre limité pour ménager les API publiques
+    const queue = rawPlaces.filter(place => !initial[place]);
+    const worker = async () => {
+      while (!cancelled && queue.length > 0) {
+        const place = queue.shift()!;
+        const coords = await resolveFrenchPlaceAsync(place);
+        if (!cancelled) setGeocoded(prev => ({ ...prev, [place]: coords }));
       }
     };
-
-    asyncResolve();
-
+    for (let i = 0; i < GEOCODING_CONCURRENCY; i++) worker();
     return () => {
-      isMounted = false;
+      cancelled = true;
     };
-  }, [placesMap]);
+  }, [rawPlaces]);
 
-  // Liste triée des lieux enrichis avec coordonnées
-  const allPlaces = useMemo(() => {
-    return Object.values(placesMap).map(p => ({
-      ...p,
-      coords: geocodedPlaces[p.name] || resolveFrenchPlaceSync(p.name) || undefined,
-    })).sort((a, b) => b.count - a.count);
-  }, [placesMap, geocodedPlaces]);
+  const pendingCount = rawPlaces.filter(p => !(p in geocoded)).length;
+  const unlocatedPlaces = rawPlaces.filter(p => geocoded[p] === null);
 
-  // Lieux filtrés selon le filtre d'acte et la recherche textuelle
-  const filteredPlaces = useMemo(() => {
-    return allPlaces.filter(p => {
-      const matchesSearch = searchQuery === '' || 
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.commune.toLowerCase().includes(searchQuery.toLowerCase());
-
-      if (!matchesSearch) return false;
-
-      if (filterType === 'all') return true;
-      return p.events.some(ev => ev.type === filterType);
-    });
-  }, [allPlaces, searchQuery, filterType]);
-
-  const activePlace = useMemo(() => {
-    if (selectedPlaceName && placesMap[selectedPlaceName]) {
-      return {
-        ...placesMap[selectedPlaceName],
-        coords: geocodedPlaces[selectedPlaceName] || resolveFrenchPlaceSync(selectedPlaceName) || undefined,
-      };
-    }
-    return filteredPlaces[0] || allPlaces[0];
-  }, [selectedPlaceName, placesMap, geocodedPlaces, filteredPlaces, allPlaces]);
-
-  // 3. Initialisation de la carte Leaflet OpenStreetMap
-  useEffect(() => {
-    if (!mapContainerRef.current) return;
-
-    if (!mapInstanceRef.current) {
-      // Centre géographique de la France métropolitaine
-      const franceCenter: [number, number] = [46.603354, 1.888334];
-      
-      const map = L.map(mapContainerRef.current, {
-        center: franceCenter,
-        zoom: 6,
-        minZoom: 4,
-        maxZoom: 18,
-        zoomControl: false, // Repositionné proprement en haut à droite
+  // 3. Regroupement par commune (même point), filtres type d'acte et recherche
+  const sites = useMemo(() => {
+    const byKey: Record<string, Site> = {};
+    for (const place of rawPlaces) {
+      const coords = geocoded[place];
+      if (!coords) continue;
+      const key = siteKey(coords);
+      const site = (byKey[key] ||= {
+        key,
+        name: coords.name || parsePlace(place).commune,
+        department: coords.department,
+        coords,
+        hamlets: [],
+        events: [],
       });
-
-      L.control.zoom({ position: 'topright' }).addTo(map);
-
-      const layerConfig = TILE_LAYERS[tileStyle];
-      const tileLayer = L.tileLayer(layerConfig.url, {
-        attribution: layerConfig.attribution,
-        maxZoom: layerConfig.maxZoom,
-      }).addTo(map);
-
-      currentTileLayerRef.current = tileLayer;
-
-      const markersGroup = L.layerGroup().addTo(map);
-      markersLayerRef.current = markersGroup;
-
-      const migrationGroup = L.layerGroup().addTo(map);
-      migrationLayerRef.current = migrationGroup;
-
-      mapInstanceRef.current = map;
+      // Nom officiel renvoyé par les API de préférence à la graphie de l'arbre (« lyon » → « Lyon »)
+      if (coords.source === 'osm_api' && coords.name) site.name = coords.name;
+      const hamlet = parsePlace(place).hamlet;
+      if (hamlet && !site.hamlets.some(h => h.toLowerCase() === hamlet.toLowerCase())) site.hamlets.push(hamlet);
+      site.events.push(...eventsByRawPlace[place]);
     }
+    for (const site of Object.values(byKey)) {
+      site.events.sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999));
+    }
+    return Object.values(byKey);
+  }, [rawPlaces, geocoded, eventsByRawPlace]);
 
+  const matchesFilters = (site: Site) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q && !site.name.toLowerCase().includes(q) && !(site.department || '').toLowerCase().includes(q)
+      && !site.hamlets.some(h => h.toLowerCase().includes(q))) return false;
+    return filterType === 'all' || site.events.some(e => e.type === filterType);
+  };
+  const countFor = (site: Site) => site.events.filter(e => filterType === 'all' || e.type === filterType).length;
+
+  const visibleSites = useMemo(
+    () => sites.filter(matchesFilters).sort((a, b) => countFor(b) - countFor(a)),
+    [sites, filterType, searchQuery]
+  );
+  const selectedSite = sites.find(s => s.key === selectedKey);
+  const totalEvents = Object.values(eventsByRawPlace).reduce((n, list) => n + list.length, 0);
+
+  // 4. Carte Leaflet
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+    const map = L.map(mapContainerRef.current, { center: FRANCE_CENTER, zoom: 6, minZoom: 3, maxZoom: 18, zoomControl: false });
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    markersLayerRef.current = L.layerGroup().addTo(map);
+    migrationLayerRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
     return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
+      map.remove();
+      mapRef.current = null;
     };
   }, []);
 
-  // 4. Changement dynamique de couche cartographique (OSM / Positron / Topo)
   useEffect(() => {
-    const map = mapInstanceRef.current;
+    const map = mapRef.current;
     if (!map) return;
-
-    if (currentTileLayerRef.current) {
-      map.removeLayer(currentTileLayerRef.current);
-    }
-
-    const layerConfig = TILE_LAYERS[tileStyle];
-    const newTileLayer = L.tileLayer(layerConfig.url, {
-      attribution: layerConfig.attribution,
-      maxZoom: layerConfig.maxZoom,
-    }).addTo(map);
-
-    currentTileLayerRef.current = newTileLayer;
+    if (tileLayerRef.current) map.removeLayer(tileLayerRef.current);
+    if (tileOverlayRef.current) map.removeLayer(tileOverlayRef.current);
+    const cfg = TILE_LAYERS[tileStyle];
+    tileLayerRef.current = L.tileLayer(cfg.url, { attribution: cfg.attribution, maxZoom: cfg.maxZoom }).addTo(map);
+    tileOverlayRef.current = cfg.overlayUrl ? L.tileLayer(cfg.overlayUrl, { maxZoom: cfg.maxZoom }).addTo(map) : null;
   }, [tileStyle]);
 
-  // 5. Affichage des marqueurs OpenStreetMap et des lignes de migration
+  // Cadrage sur les communes visibles : à la fin de la localisation, au changement de filtre, et sur demande.
+  // Jamais à la sélection d'une commune (la carte ne doit pas « sauter »).
+  const fitToSites = (list: Site[] = visibleSites) => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (list.length === 0) {
+      map.setView(FRANCE_CENTER, 6);
+      return;
+    }
+    map.fitBounds(L.latLngBounds(list.map(s => [s.coords.lat, s.coords.lng] as [number, number])), { padding: [40, 40], maxZoom: 11 });
+  };
+  const locatingDone = rawPlaces.length > 0 && pendingCount === 0;
   useEffect(() => {
-    const map = mapInstanceRef.current;
-    const markersGroup = markersLayerRef.current;
-    const migrationGroup = migrationLayerRef.current;
-    if (!map || !markersGroup || !migrationGroup) return;
+    if (locatingDone) fitToSites();
+  }, [locatingDone, filterType, searchQuery]);
 
-    markersGroup.clearLayers();
-    migrationGroup.clearLayers();
-
-    const validCoordinates: L.LatLngExpression[] = [];
-
-    // Marqueurs des communes
-    filteredPlaces.forEach(place => {
-      const coords = place.coords;
-      if (!coords) return;
-
-      const latLng: [number, number] = [coords.lat, coords.lng];
-      validCoordinates.push(latLng);
-
-      const isSelected = activePlace && activePlace.name === place.name;
-
-      // Calcul des proportions d'actes
-      const birthsCount = place.events.filter(e => e.type === 'birth').length;
-      const marriagesCount = place.events.filter(e => e.type === 'marriage').length;
-      const deathsCount = place.events.filter(e => e.type === 'death').length;
-
-      // Création d'une icône HTML personnalisée haute fidélité
-      const customIcon = L.divIcon({
-        className: 'custom-genealogy-marker',
-        html: `
-          <div style="position: relative; cursor: pointer; transform: translate(-50%, -100%);">
-            <div style="
-              display: flex;
-              align-items: center;
-              gap: 4px;
-              padding: 4px 8px;
-              background: ${isSelected ? '#78350f' : '#ffffff'};
-              color: ${isSelected ? '#ffffff' : '#1c1917'};
-              border: 2px solid ${isSelected ? '#d97706' : '#78350f'};
-              border-radius: 9999px;
-              box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-              font-family: ui-sans-serif, system-ui, sans-serif;
-              font-size: 11px;
-              font-weight: 700;
-              white-space: nowrap;
-              transition: all 0.2s ease;
-            ">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: ${isSelected ? '#fef3c7' : '#92400e'}">
-                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
-                <circle cx="12" cy="10" r="3"></circle>
-              </svg>
-              <span>${place.commune}</span>
-              <span style="
-                background: ${isSelected ? '#d97706' : '#f5f5f4'};
-                color: ${isSelected ? '#ffffff' : '#44403c'};
-                padding: 1px 5px;
-                border-radius: 9999px;
-                font-size: 10px;
-                font-family: ui-monospace, monospace;
-              ">${place.count}</span>
-            </div>
-            <!-- Pin pointer needle -->
-            <div style="
-              width: 0; 
-              height: 0; 
-              border-left: 6px solid transparent;
-              border-right: 6px solid transparent;
-              border-top: 8px solid ${isSelected ? '#d97706' : '#78350f'};
-              margin: 0 auto;
-            "></div>
-          </div>
-        `,
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
+  // 5. Cercles proportionnels au nombre d'actes ; nom au survol et sur la commune sélectionnée
+  useEffect(() => {
+    const layer = markersLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+    for (const site of visibleSites) {
+      const count = countFor(site);
+      const isSelected = site.key === selectedKey;
+      const marker = L.circleMarker([site.coords.lat, site.coords.lng], {
+        radius: Math.min(26, 6 + Math.sqrt(count) * 3.2),
+        color: isSelected ? '#451a03' : '#ffffff',
+        weight: isSelected ? 3 : 1.5,
+        fillColor: isSelected ? '#b45309' : '#92400e',
+        fillOpacity: isSelected ? 0.95 : 0.7,
       });
+      marker.bindTooltip(
+        `<strong>${escapeHtml(site.name)}</strong> · ${count} acte${count > 1 ? 's' : ''}`,
+        { direction: 'top', offset: [0, -6], permanent: isSelected, className: 'genealogor-map-label' }
+      );
+      marker.on('click', () => setSelectedKey(site.key));
+      marker.addTo(layer);
+      if (isSelected) marker.bringToFront();
+    }
+  }, [visibleSites, selectedKey, filterType]);
 
-      const marker = L.marker(latLng, { icon: customIcon });
-
-      // Popup riche et interactif
-      const popupContent = document.createElement('div');
-      popupContent.className = 'font-sans text-xs p-1 space-y-2';
-      popupContent.innerHTML = `
-        <div style="border-bottom: 1px solid #e7e5e4; padding-bottom: 6px;">
-          <div style="font-size: 9px; font-family: ui-monospace, monospace; text-transform: uppercase; color: #78350f; font-weight: 700;">
-            ${coords.department ? `${coords.department} · ` : ''}Foyer Familial
-          </div>
-          <div style="font-size: 14px; font-weight: 700; font-family: serif; color: #1c1917; margin-top: 2px;">
-            ${place.name}
-          </div>
-          <div style="font-size: 11px; color: #78716c; margin-top: 2px;">
-            ${place.count} acte(s) répertorié(s) (${birthsCount} N, ${marriagesCount} M, ${deathsCount} D)
-          </div>
-        </div>
-        <div style="max-height: 140px; overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 4px;">
-          ${place.events.slice(0, 8).map(ev => `
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 3px 6px; background: #fafaf9; border-radius: 4px; border: 1px solid #f5f5f4;">
-              <span style="font-weight: 600; color: #292524;">${ev.personName}</span>
-              <span style="font-size: 10px; font-family: monospace; color: #78716c;">${ev.type.toUpperCase().slice(0, 1)} · ${ev.year || 's.d.'}</span>
-            </div>
-          `).join('')}
-          ${place.events.length > 8 ? `<div style="font-size: 10px; color: #78350f; text-align: center; font-style: italic;">+ ${place.events.length - 8} autre(s) événement(s)</div>` : ''}
-        </div>
-      `;
-
-      marker.bindPopup(popupContent, { maxWidth: 280, className: 'genealogor-popup' });
-
-      marker.on('click', () => {
-        setSelectedPlaceName(place.name);
-      });
-
-      marker.addTo(markersGroup);
-    });
-
-    // Tracé des lignes de flux migratoires entre générations familiales (ex: père -> enfant)
-    if (showMigrations && Object.keys(data.individuals || {}).length > 0) {
-      const drawnLinks = new Set<string>();
-
-      for (const fam of Object.values(data.families || {})) {
-        const husb = fam.husbandId ? data.individuals[fam.husbandId] : null;
-        const husbPlace = husb?.birth?.place;
-        const husbCoords = husbPlace ? (geocodedPlaces[husbPlace] || resolveFrenchPlaceSync(husbPlace)) : null;
-
-        for (const childId of fam.childrenIds) {
-          const child = data.individuals[childId];
-          const childPlace = child?.birth?.place;
-          const childCoords = childPlace ? (geocodedPlaces[childPlace] || resolveFrenchPlaceSync(childPlace)) : null;
-
-          if (husbCoords && childCoords && (husbCoords.lat !== childCoords.lat || husbCoords.lng !== childCoords.lng)) {
-            const linkKey = `${husbCoords.lat},${husbCoords.lng}->${childCoords.lat},${childCoords.lng}`;
-            if (!drawnLinks.has(linkKey)) {
-              drawnLinks.add(linkKey);
-
-              const polyline = L.polyline(
-                [[husbCoords.lat, husbCoords.lng], [childCoords.lat, childCoords.lng]],
-                {
-                  color: '#b45309',
-                  weight: 2,
-                  dashArray: '4, 8',
-                  opacity: 0.65,
-                }
-              );
-
-              polyline.bindTooltip(
-                `Migration familiale : ${extractCommuneName(husbPlace || '')} → ${extractCommuneName(childPlace || '')}`,
-                { sticky: true, className: 'text-[10px] font-sans' }
-              );
-
-              polyline.addTo(migrationGroup);
-            }
-          }
-        }
+  // 6. Migrations (option) : du lieu de naissance du père à celui de l'enfant
+  useEffect(() => {
+    const layer = migrationLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+    if (!showMigrations) return;
+    const drawn = new Set<string>();
+    for (const fam of Object.values(data.families || {})) {
+      const fatherPlace = fam.husbandId ? data.individuals[fam.husbandId]?.birth?.place?.trim() : undefined;
+      const from = fatherPlace ? geocoded[fatherPlace] : null;
+      if (!from) continue;
+      for (const childId of fam.childrenIds) {
+        const childPlace = data.individuals[childId]?.birth?.place?.trim();
+        const to = childPlace ? geocoded[childPlace] : null;
+        if (!to || coordKey(from) === coordKey(to)) continue;
+        const key = `${coordKey(from)}>${coordKey(to)}`;
+        if (drawn.has(key)) continue;
+        drawn.add(key);
+        L.polyline([[from.lat, from.lng], [to.lat, to.lng]], { color: '#b45309', weight: 2, dashArray: '4, 8', opacity: 0.6 })
+          .bindTooltip(`${escapeHtml(from.name || '')} → ${escapeHtml(to.name || '')}`, { sticky: true })
+          .addTo(layer);
       }
     }
+  }, [showMigrations, geocoded, data]);
 
-    // Ajuster la vue si des coordonnées sont disponibles
-    if (validCoordinates.length > 0) {
-      const bounds = L.latLngBounds(validCoordinates);
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
-    }
-  }, [filteredPlaces, activePlace, showMigrations, data]);
-
-  // 6. Centrer la carte lors de la sélection d'un lieu depuis la liste
-  const handleSelectPlace = (place: PlaceSummary) => {
-    setSelectedPlaceName(place.name);
-    const coords = place.coords;
-    const map = mapInstanceRef.current;
-    if (coords && map) {
-      map.flyTo([coords.lat, coords.lng], 12, { duration: 1.2 });
-    }
+  const handleSelectFromList = (site: Site) => {
+    setSelectedKey(site.key);
+    mapRef.current?.flyTo([site.coords.lat, site.coords.lng], Math.max(mapRef.current.getZoom(), 10), { duration: 0.8 });
   };
 
-  const handleResetFranceView = () => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-    map.flyTo([46.603354, 1.888334], 6, { duration: 1 });
-  };
-
-  const handleFitAllAncestors = () => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-    const coords = filteredPlaces
-      .map(p => p.coords)
-      .filter((c): c is GeoCoordinates => Boolean(c))
-      .map(c => [c.lat, c.lng] as [number, number]);
-
-    if (coords.length > 0) {
-      const bounds = L.latLngBounds(coords);
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
-    } else {
-      handleResetFranceView();
-    }
-  };
+  const selectedEvents = selectedSite
+    ? selectedSite.events.filter(e => filterType === 'all' || e.type === filterType)
+    : [];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 space-y-6">
-      
-      {/* Header bar */}
-      <div className="bg-white border border-stone-200/90 rounded-2xl p-5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <span className="text-[10px] uppercase tracking-widest font-mono text-amber-800 font-bold block">
-            GÉOGRAPHIE FAMILIALE & MIGRATIONS · OPENSTREETMAP
-          </span>
-          <h1 className="font-serif text-2xl font-bold text-stone-900 mt-0.5">
-            Carte de France des Foyers & Paroisses
-          </h1>
-          <p className="text-xs text-stone-600 mt-0.5">
-            Cartographie interactive OpenStreetMap des naissances, mariages et sépultures de votre lignée.
-          </p>
+    <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 space-y-4">
+
+      {/* En-tête et commandes */}
+      <div className="bg-white dark:bg-[#1A1D24] border border-stone-200/90 dark:border-stone-800 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h1 className="font-serif text-2xl font-bold text-stone-900 dark:text-stone-100">Carte des lieux de la famille</h1>
+            <p className="text-xs text-stone-600 dark:text-stone-400 mt-0.5">
+              {sites.length} commune{sites.length > 1 ? 's' : ''} · {totalEvents} acte{totalEvents > 1 ? 's' : ''} (naissances, mariages, décès)
+              {unlocatedPlaces.length > 0 && ` · ${unlocatedPlaces.length} lieu${unlocatedPlaces.length > 1 ? 'x' : ''} non localisé${unlocatedPlaces.length > 1 ? 's' : ''}`}
+            </p>
+          </div>
+          {pendingCount > 0 && (
+            <span className="flex items-center gap-1.5 text-[11px] font-mono text-amber-800 dark:text-amber-400">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Localisation des lieux… {rawPlaces.length - pendingCount}/{rawPlaces.length}
+            </span>
+          )}
         </div>
 
-        {/* Quick Map Controls & Stats */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Style de carte */}
-          <div className="flex items-center bg-stone-100 p-0.5 rounded-xl border border-stone-200 text-xs">
-            {(['osm', 'positron', 'topo'] as MapTileStyle[]).map(style => (
+          <div className="flex items-center p-0.5 bg-stone-100 dark:bg-stone-800 rounded-xl text-xs" role="group" aria-label="Type d'acte">
+            {(['all', 'birth', 'marriage', 'death'] as const).map(type => (
               <button
-                key={style}
-                onClick={() => setTileStyle(style)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                  tileStyle === style
-                    ? 'bg-white text-stone-900 shadow-2xs'
-                    : 'text-stone-600 hover:text-stone-900'
+                key={type}
+                type="button"
+                onClick={() => setFilterType(type)}
+                aria-pressed={filterType === type}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
+                  filterType === type ? 'bg-amber-900 text-white' : 'text-stone-700 dark:text-stone-300 hover:text-stone-950'
                 }`}
               >
-                {style === 'osm' ? 'Standard OSM' : style === 'positron' ? 'Clair' : 'Relief'}
+                {type === 'all' ? 'Tous' : EVENT_LABELS[type].plural}
               </button>
             ))}
           </div>
 
-          <button
-            onClick={() => setShowMigrations(!showMigrations)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${
-              showMigrations
-                ? 'bg-amber-100/80 text-amber-900 border-amber-300'
-                : 'bg-white text-stone-700 border-stone-300 hover:bg-stone-50'
-            }`}
-            title="Afficher les lignes de flux migratoires entre générations"
-          >
-            <Route className="w-3.5 h-3.5 text-amber-800" />
-            <span className="hidden sm:inline">Flux migratoires</span>
-          </button>
+          <div className="relative flex-1 min-w-[160px]">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-stone-400" />
+            <input
+              type="text"
+              placeholder="Commune, lieu-dit ou département…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-700"
+            />
+          </div>
 
           <button
-            onClick={handleFitAllAncestors}
-            className="px-3 py-1.5 bg-amber-900 hover:bg-amber-950 text-white rounded-xl text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5"
-            title="Recadrer sur tous les ancêtres"
+            type="button"
+            onClick={() => fitToSites()}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-900 hover:bg-amber-950 text-white rounded-xl text-xs font-semibold cursor-pointer"
+            title="Afficher toutes les communes"
           >
             <Compass className="w-3.5 h-3.5" />
             <span>Recadrer</span>
@@ -528,199 +364,174 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
         </div>
       </div>
 
-      {/* Main Grid: Interactive OSM Map (7 cols) + Places Sidebar & Events (5 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
-        {/* Left / Top : Interactive OpenStreetMap Leaflet Container */}
-        <div className="lg:col-span-7 space-y-3">
-          <div className="relative bg-stone-100 border border-stone-300/80 rounded-2xl overflow-hidden shadow-sm h-[520px] md:h-[600px]">
-            {/* Map Canvas */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+
+        {/* Carte */}
+        <div className="lg:col-span-7">
+          <div className="relative bg-stone-100 border border-stone-300/80 dark:border-stone-700 rounded-2xl overflow-hidden shadow-sm h-[420px] sm:h-[560px]">
             <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-            {/* Floating Top Filter Bar on Map */}
-            <div className="absolute top-3 left-3 z-[1000] flex flex-wrap items-center gap-1.5 bg-white/95 backdrop-blur-md p-1.5 rounded-xl border border-stone-200/90 shadow-md text-xs">
-              <span className="text-[10px] font-mono text-stone-400 px-1 font-bold">FILTRE :</span>
-              {(['all', 'birth', 'marriage', 'death'] as const).map(type => (
+            {/* Options d'affichage */}
+            <div className="absolute top-3 left-3 z-[1000] flex flex-col gap-1.5 text-[11px]">
+              <div className="flex items-center bg-white/95 p-0.5 rounded-lg border border-stone-200 shadow-sm" role="group" aria-label="Fond de carte">
+                {(['positron', 'osm', 'topo'] as MapTileStyle[]).map(style => (
+                  <button
+                    key={style}
+                    type="button"
+                    onClick={() => setTileStyle(style)}
+                    aria-pressed={tileStyle === style}
+                    className={`px-2 py-0.5 rounded-md font-semibold cursor-pointer ${tileStyle === style ? 'bg-stone-800 text-white' : 'text-stone-700 hover:bg-stone-100'}`}
+                  >
+                    {TILE_LAYERS[style].label}
+                  </button>
+                ))}
+              </div>
+              <label className="flex items-center gap-1.5 bg-white/95 px-2 py-1 rounded-lg border border-stone-200 shadow-sm text-stone-700 cursor-pointer select-none">
+                <input type="checkbox" checked={showMigrations} onChange={e => setShowMigrations(e.target.checked)} className="h-3 w-3" />
+                <Route className="w-3 h-3 text-amber-800" />
+                <span>Migrations père → enfant</span>
+              </label>
+            </div>
+
+            {/* Légende */}
+            {/* Sur petit écran, laissée de côté quand une commune est sélectionnée (même emplacement) */}
+            <div className={`absolute bottom-3 left-3 z-[1000] bg-white/95 px-2.5 py-1.5 rounded-lg border border-stone-200 shadow-sm text-[11px] text-stone-600 items-center gap-2 ${selectedSite ? 'hidden lg:flex' : 'flex'}`}>
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-800/70" />
+              <span className="inline-block w-4 h-4 rounded-full bg-amber-800/70" />
+              <span>Taille = nombre d'actes</span>
+            </div>
+
+            {/* Commune sélectionnée (rappel sur la carte) */}
+            {selectedSite && (
+              <div className="absolute bottom-3 right-3 z-[1000] max-w-[70%] flex items-center gap-2 bg-white/95 pl-3 pr-1 py-1 rounded-xl border border-amber-300 shadow-md text-xs">
+                <span className="font-serif font-bold text-stone-900 truncate">{selectedSite.name}</span>
                 <button
-                  key={type}
-                  onClick={() => setFilterType(type)}
-                  className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all ${
-                    filterType === type
-                      ? 'bg-amber-900 text-white shadow-2xs'
-                      : 'text-stone-700 hover:bg-stone-100'
-                  }`}
+                  type="button"
+                  onClick={() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className="lg:hidden shrink-0 px-2 py-1 rounded-lg bg-amber-900 text-white font-semibold cursor-pointer"
                 >
-                  {type === 'all' ? 'Tous' : type === 'birth' ? 'Naissances' : type === 'marriage' ? 'Mariages' : 'Décès'}
+                  Voir les actes
                 </button>
-              ))}
-            </div>
-
-            {/* Floating Bottom Badge */}
-            <div className="absolute bottom-3 left-3 z-[1000] bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-stone-200/90 shadow-sm text-xs font-mono text-stone-600 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>{filteredPlaces.length} commune(s) géolocalisée(s) en France</span>
-            </div>
-
-            {/* Quick France center shortcut */}
-            <div className="absolute bottom-3 right-3 z-[1000] flex items-center gap-1.5">
-              <button
-                onClick={handleResetFranceView}
-                className="bg-white/95 hover:bg-white text-stone-800 text-[11px] font-semibold px-2.5 py-1.5 rounded-xl border border-stone-300 shadow-md backdrop-blur-md transition-all flex items-center gap-1"
-              >
-                <span>Vue France</span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedKey('')}
+                  aria-label="Désélectionner"
+                  className="shrink-0 p-1 rounded-md text-stone-500 hover:bg-stone-100 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right / Bottom : Selected Place detail & Places browser (5 cols) */}
+        {/* Détail de la commune et liste */}
         <div className="lg:col-span-5 space-y-4">
-          
-          {/* Active Place Detail Card */}
-          {activePlace ? (
-            <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-2xs space-y-4">
-              <div className="border-b border-stone-100 pb-3 flex items-start justify-between gap-2">
+          <div ref={detailRef} className="scroll-mt-32">
+            {selectedSite ? (
+              <div className="bg-white dark:bg-[#1A1D24] border border-amber-300 dark:border-amber-800 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3">
                 <div>
-                  <span className="text-[9px] uppercase font-mono tracking-widest text-amber-800 font-bold block">
-                    COMMUNE SÉLECTIONNÉE
-                  </span>
-                  <h2 className="font-serif text-xl font-bold text-stone-900 mt-0.5">
-                    {activePlace.name}
-                  </h2>
-                  <p className="text-xs text-stone-500 mt-0.5">
-                    {activePlace.coords?.department ? `${activePlace.coords.department} · ` : ''}
-                    {activePlace.count} acte(s) d'état civil enregistrés
+                  <h2 className="font-serif text-xl font-bold text-stone-900 dark:text-stone-100">{selectedSite.name}</h2>
+                  <p className="text-xs text-stone-500">
+                    {selectedSite.department ? `${selectedSite.department} · ` : ''}
+                    {selectedEvents.length} acte{selectedEvents.length > 1 ? 's' : ''}
+                    {(['birth', 'marriage', 'death'] as EventType[]).map(t => {
+                      const n = selectedSite.events.filter(e => e.type === t).length;
+                      return n > 0 && filterType === 'all' ? ` · ${n} ${EVENT_LABELS[t].plural.toLowerCase()}` : '';
+                    })}
                   </p>
+                  {selectedSite.hamlets.length > 0 && (
+                    <p className="text-[11px] text-stone-500 mt-1">
+                      <span className="font-semibold">Lieux-dits :</span> {selectedSite.hamlets.join(', ')}
+                    </p>
+                  )}
                 </div>
-                {activePlace.coords && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
-                    GPS OK
-                  </span>
-                )}
+
+                <ul className="space-y-1 max-h-[320px] overflow-y-auto pr-1">
+                  {selectedEvents.map((ev, idx) => {
+                    const meta = EVENT_LABELS[ev.type];
+                    return (
+                      <li key={idx}>
+                        <button
+                          type="button"
+                          onClick={() => ev.personId && onSelectPerson(ev.personId)}
+                          className="w-full flex items-center gap-2 p-2 rounded-lg border border-stone-200 dark:border-stone-700 hover:border-amber-700 hover:bg-amber-50/60 dark:hover:bg-amber-950/30 text-left cursor-pointer"
+                          title="Ouvrir la fiche"
+                        >
+                          <span className={`shrink-0 text-[9px] uppercase font-mono font-bold px-1.5 py-0.5 rounded ${meta.badge}`}>{meta.label}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-serif text-xs font-bold text-stone-900 dark:text-stone-100 truncate">{ev.personName}</span>
+                            {ev.hamlet && <span className="block text-[10px] text-stone-500 truncate">{ev.hamlet}</span>}
+                          </span>
+                          <span className="shrink-0 font-mono text-[11px] text-stone-500">{ev.rawDate || ev.year || 's.d.'}</span>
+                          <ChevronRight className="w-3.5 h-3.5 shrink-0 text-stone-400" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-
-              {/* Events list for active place */}
-              <div className="space-y-2">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-stone-400 block">
-                  Actes rattachés ({activePlace.events.length})
-                </span>
-
-                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
-                  {activePlace.events.map((ev, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => ev.personId && onSelectPerson(ev.personId)}
-                      className="p-2.5 rounded-xl border border-stone-200 hover:border-amber-700 hover:bg-amber-50/50 cursor-pointer transition-all flex items-center justify-between text-left group"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={`text-[9px] uppercase font-mono px-1.5 py-0.2 rounded font-bold ${
-                              ev.type === 'birth'
-                                ? 'bg-emerald-100 text-emerald-900'
-                                : ev.type === 'marriage'
-                                  ? 'bg-amber-100 text-amber-900'
-                                  : 'bg-rose-100 text-rose-900'
-                            }`}
-                          >
-                            {ev.type === 'birth' ? 'N' : ev.type === 'marriage' ? 'M' : 'D'}
-                          </span>
-                          <span className="font-serif text-xs font-bold text-stone-900 group-hover:text-amber-900">
-                            {ev.personName}
-                          </span>
-                        </div>
-                        {ev.rawDate && (
-                          <span className="text-[11px] font-mono text-stone-500 block">
-                            {ev.rawDate}
-                          </span>
-                        )}
-                      </div>
-
-                      <span className="text-xs text-amber-800 opacity-0 group-hover:opacity-100 transition-opacity font-medium">
-                        Voir fiche →
-                      </span>
-                    </div>
-                  ))}
-                </div>
+            ) : (
+              <div className="p-5 text-center bg-white dark:bg-[#1A1D24] rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 text-xs text-stone-500">
+                Touchez un cercle sur la carte ou une commune ci-dessous pour voir les naissances, mariages et décès qui s'y sont produits.
               </div>
-            </div>
-          ) : (
-            <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-stone-200 text-xs text-stone-500">
-              Cliquez sur un marqueur ou sélectionnez une commune pour afficher les détails.
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* Communes Search & Browser list */}
-          <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold font-serif text-stone-900">
-                Toutes les communes ({filteredPlaces.length})
-              </span>
-              <span className="text-[10px] font-mono text-stone-500">
-                Trier par fréquence
-              </span>
-            </div>
-
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400" />
-              <input
-                type="text"
-                placeholder="Rechercher une commune ou un département..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-xs bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-700"
-              />
-            </div>
-
-            {/* List */}
-            <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
-              {filteredPlaces.length === 0 ? (
-                <div className="p-4 text-center text-xs text-stone-500">
-                  Aucune commune ne correspond à la recherche.
-                </div>
-              ) : (
-                filteredPlaces.map(place => {
-                  const isSelected = activePlace && activePlace.name === place.name;
-                  return (
-                    <div
-                      key={place.name}
-                      onClick={() => handleSelectPlace(place)}
-                      className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between text-left ${
+          <div className="bg-white dark:bg-[#1A1D24] border border-stone-200 dark:border-stone-800 rounded-2xl p-4 shadow-2xs space-y-2">
+            <span className="text-xs font-bold font-serif text-stone-900 dark:text-stone-100 block">
+              Communes ({visibleSites.length}) · par nombre d'actes
+            </span>
+            <ul className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
+              {visibleSites.length === 0 && (
+                <li className="p-3 text-center text-xs text-stone-500">
+                  {pendingCount > 0 ? 'Localisation en cours…' : 'Aucune commune ne correspond.'}
+                </li>
+              )}
+              {visibleSites.map(site => {
+                const isSelected = site.key === selectedKey;
+                return (
+                  <li key={site.key}>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectFromList(site)}
+                      className={`w-full p-2 rounded-lg border flex items-center justify-between gap-2 text-left cursor-pointer transition-colors ${
                         isSelected
-                          ? 'bg-amber-50/90 border-amber-800 shadow-2xs ring-1 ring-amber-800'
-                          : 'bg-white border-stone-200 hover:border-stone-400 hover:bg-stone-50/60'
+                          ? 'bg-amber-50 border-amber-800 ring-1 ring-amber-800 dark:bg-amber-950/40'
+                          : 'border-stone-200 dark:border-stone-700 hover:border-stone-400'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
+                      <span className="flex items-center gap-2 min-w-0">
                         <MapPin className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-amber-800' : 'text-stone-400'}`} />
-                        <div>
-                          <span className="font-serif text-xs font-semibold text-stone-900 block">
-                            {place.commune}
-                          </span>
-                          <span className="text-[10px] text-stone-500 block truncate max-w-[200px]">
-                            {place.name.split(',').slice(1).join(',')}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-stone-100 text-stone-700">
-                          {place.count}
+                        <span className="min-w-0">
+                          <span className="block font-serif text-xs font-semibold text-stone-900 dark:text-stone-100 truncate">{site.name}</span>
+                          {site.department && <span className="block text-[10px] text-stone-500">{site.department}</span>}
                         </span>
-                        <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+                      </span>
+                      <span className="shrink-0 text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300">
+                        {countFor(site)}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {unlocatedPlaces.length > 0 && pendingCount === 0 && (
+              <details className="text-[11px] text-stone-500 pt-1">
+                <summary className="cursor-pointer font-semibold">
+                  {unlocatedPlaces.length} lieu{unlocatedPlaces.length > 1 ? 'x' : ''} non localisé{unlocatedPlaces.length > 1 ? 's' : ''}
+                </summary>
+                <ul className="mt-1 space-y-0.5 pl-3 list-disc">
+                  {unlocatedPlaces.map(p => (
+                    <li key={p}>{p} ({eventsByRawPlace[p].length} acte{eventsByRawPlace[p].length > 1 ? 's' : ''})</li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
-
         </div>
-
       </div>
-
     </div>
   );
 };
