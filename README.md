@@ -2,10 +2,6 @@
 
 <div align="center">
 
-<img src="docs/app_screenshot.png" alt="Capture d'écran Genealogor" width="92%" style="border-radius: 14px; box-shadow: 0 8px 30px rgba(0,0,0,0.18); border: 1px solid rgba(120,113,108,0.25);" />
-
-<br/><br/>
-
 **Plateforme moderne de généalogie collaborative, studio d'archives paléographiques, partage sécurisé par branche et mises à jour système automatiques.**
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
