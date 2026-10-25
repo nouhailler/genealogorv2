@@ -39,7 +39,7 @@ import { GenealogyData, Individual, ArchiveDocument, BranchAccess, BranchRole, B
 import { createEmptyGenealogy } from './lib/sample-data';
 import { getStoredArchives, saveStoredArchives, clearStoredArchives } from './lib/archive-store';
 import { filterGenealogyData } from './lib/branch-filter';
-import { realtimeClient } from './lib/realtime-client';
+import { realtimeClient, isJsonResponse } from './lib/realtime-client';
 import { verifyPassword } from './lib/crypto';
 import { validateChronology } from './lib/validation';
 import { 
@@ -188,6 +188,8 @@ export default function App() {
 
   const [connectedPeerCount, setConnectedPeerCount] = useState<number>(1);
   const [isWsConnected, setIsWsConnected] = useState<boolean>(false);
+  // Relais Express/WebSocket absent (hébergement statique type Cloudflare) : mode local + Firestore uniquement
+  const [isRelayAvailable, setIsRelayAvailable] = useState<boolean>(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [authError, setAuthError] = useState<AuthErrorInfo | null>(null);
 
@@ -431,6 +433,13 @@ export default function App() {
           }),
         });
 
+        // Hébergement statique : /api/* renvoie la page HTML de l'application au lieu de JSON
+        if (!isJsonResponse(res)) {
+          setIsRelayAvailable(false);
+          return;
+        }
+        setIsRelayAvailable(true);
+
         if (res.ok) {
           const authData = await res.json();
           if (authData.token) {
@@ -444,7 +453,10 @@ export default function App() {
           }
         }
       } catch (err) {
-        console.warn('Impossible de récupérer le jeton serveur WebSocket:', err);
+        // Pas de serveur relais joignable : inutile de tenter le WebSocket en boucle
+        console.warn('Relais temps réel indisponible, mode local + Firestore :', err);
+        setIsRelayAvailable(false);
+        return;
       }
 
       if (isCancelled) return;
@@ -696,7 +708,7 @@ export default function App() {
     realtimeClient.sendAction('person:edit', updated);
 
     // File d'attente si hors ligne
-    if (!isWsConnected) {
+    if (!isWsConnected && isRelayAvailable) {
       addPendingChange('person:edit', updated);
     }
 
@@ -719,7 +731,7 @@ export default function App() {
     setVersionedItem(`${STORAGE_KEYS.TREE}_${roomId}`, nextData);
     setVersionedItem(STORAGE_KEYS.TREE, nextData);
     realtimeClient.sendAction('tree:update', nextData);
-    if (!isWsConnected) {
+    if (!isWsConnected && isRelayAvailable) {
       addPendingChange('tree:update', nextData);
     }
     try {
@@ -742,7 +754,7 @@ export default function App() {
     setVersionedItem(STORAGE_KEYS.ARCHIVES, nextArchives);
     realtimeClient.sendAction('archive:add', newDoc);
 
-    if (!isWsConnected) {
+    if (!isWsConnected && isRelayAvailable) {
       addPendingChange('archive:add', newDoc);
     }
 
@@ -768,7 +780,7 @@ export default function App() {
     setVersionedItem(STORAGE_KEYS.ARCHIVES, nextArchives);
     realtimeClient.sendAction('archive:add', updated);
 
-    if (!isWsConnected) {
+    if (!isWsConnected && isRelayAvailable) {
       addPendingChange('archive:add', updated);
     }
 
@@ -794,7 +806,7 @@ export default function App() {
     setVersionedItem(STORAGE_KEYS.ARCHIVES, nextArchives);
     realtimeClient.sendAction('archive:delete', id);
 
-    if (!isWsConnected) {
+    if (!isWsConnected && isRelayAvailable) {
       addPendingChange('archive:delete', id);
     }
     
@@ -831,7 +843,7 @@ export default function App() {
     if (newData.rootPersonId) setSelectedPersonId(newData.rootPersonId);
     realtimeClient.sendAction('tree:update', newData);
 
-    if (!isWsConnected) {
+    if (!isWsConnected && isRelayAvailable) {
       addPendingChange('tree:update', newData);
     }
 
@@ -961,7 +973,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({ roomId: treeId }),
       });
-      if (!tokenRes.ok) return;
+      if (!tokenRes.ok || !isJsonResponse(tokenRes)) return;
       const { token, role } = await tokenRes.json();
       if (!token || role !== 'admin') return;
       const delRes = await fetch(`/api/rooms/${encodeURIComponent(treeId)}`, {

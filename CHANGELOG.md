@@ -3,6 +3,16 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.9.1] — 2026-10-25
+
+### ☁️ Préparation au déploiement Cloudflare
+- Suppression de `bun.lock` : Cloudflare utilisait Bun au lieu de npm (`package-lock.json`, `.npmrc`).
+- Ajout de `.nvmrc` (Node 22), du champ `engines` et de `wrangler.jsonc` (ressources statiques `dist/`, routage monopage).
+- Suppression de `public/_redirects` (`/* /index.html 200`), inutile sur Pages et source de boucle sur Workers.
+- Hébergement statique détecté : sans serveur relais, plus de reconnexion WebSocket toutes les 4 s ni de file d'attente hors-ligne qui ne se vide jamais.
+- La file d'attente hors-ligne ne garde plus qu'un seul instantané complet de l'arbre (`tree:update`) au lieu d'un par modification.
+- README : section « Déploiement Cloudflare » et URL du dépôt corrigée.
+
 ## [2.9.0] — 2026-10-25
 
 ### 🌳 Ajouté — Véritable gestion des arbres pour l'administrateur

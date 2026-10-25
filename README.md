@@ -212,8 +212,8 @@ npm test
 
 ```bash
 # 1. Cloner le projet
-git clone https://github.com/nouhailler/genealogor.git
-cd genealogor
+git clone https://github.com/nouhailler/genealogorv2.git
+cd genealogorv2
 
 # 2. Installer les dépendances
 npm install
@@ -223,6 +223,36 @@ npm run dev
 ```
 
 L'application est disponible sur **`http://localhost:3000`**.
+
+---
+
+## ☁️ Déploiement Cloudflare
+
+Cloudflare héberge **l'interface React** (fichiers statiques de `dist/`). Le serveur Express/WebSocket (`server.ts`) n'y est pas exécuté.
+
+### Paramètres de build (Workers ou Pages, connexion au dépôt GitHub)
+
+| Paramètre | Valeur |
+| :--- | :--- |
+| Gestionnaire de paquets | **npm** (seul `package-lock.json` est versionné, pas de `bun.lock`) |
+| Commande de build | `npm run build` |
+| Répertoire de sortie | `dist` |
+| Version de Node | 22 (fichier `.nvmrc`) |
+| Commande de déploiement (Workers) | `npx wrangler deploy` (configuration `wrangler.jsonc`) |
+
+Le routage monopage (retour à `index.html` pour toute URL, ex. `/?room=famille-coste`) est assuré par `not_found_handling: "single-page-application"` sur Workers, et automatiquement par Pages.
+
+### Ce qui fonctionne sur Cloudflare
+
+- Toute l'application en **mode local** (arbres, import/export GEDCOM, archives, sauvegardes chiffrées), données dans le navigateur.
+- La **synchronisation Google Cloud Firestore** après connexion Google. Ajoutez le domaine Cloudflare (`*.workers.dev`, `*.pages.dev` ou votre domaine) dans *Firebase Console → Authentication → Settings → Authorized domains*, sinon la connexion Google est refusée.
+
+### Ce qui nécessite le serveur Node (`npm start`) sur un autre hébergeur
+
+- Le **relais temps réel WebSocket** (présence des membres, modifications en direct).
+- Les **liens de partage par branche** vérifiés côté serveur (`/api/auth/room-token`) et la purge serveur à la suppression d'un arbre.
+
+Sans serveur, l'application le détecte (les appels `/api/*` ne renvoient pas de JSON) et passe en mode local + Firestore, sans tentatives de reconnexion en boucle. Pour utiliser un relais hébergé ailleurs, définissez `VITE_WS_URL` (ex. `wss://relais.example.com/ws`) dans les variables de build.
 
 ---
 

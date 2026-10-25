@@ -1,0 +1,11 @@
+// Déploiement Cloudflare Workers (ressources statiques) : seule l'interface React (dist/) est publiée.
+// Le serveur Express/WebSocket (server.ts) ne tourne pas sur Cloudflare : voir README « Déploiement Cloudflare ».
+{
+  "name": "genealogorv2",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    // Application monopage : toute route inconnue renvoie index.html
+    "not_found_handling": "single-page-application"
+  }
+}

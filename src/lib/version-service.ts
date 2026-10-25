@@ -90,7 +90,7 @@ class VersionService {
         localStorage.setItem(STORAGE_KEYS.LAST_CHECK, String(this.lastChecked));
       }
 
-      if (res.ok) {
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
         const data = await res.json();
         // Compare version
         if (data.version && data.version !== APP_METADATA.version) {

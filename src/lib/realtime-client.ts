@@ -223,3 +223,11 @@ class RealtimeClient {
 }
 
 export const realtimeClient = new RealtimeClient();
+
+/**
+ * Vrai si la réponse provient bien de l'API du serveur relais (JSON). Sur un hébergement statique
+ * (Cloudflare Pages/Workers), /api/* retombe sur index.html (200, text/html).
+ */
+export function isJsonResponse(res: Response): boolean {
+  return (res.headers.get('content-type') || '').includes('application/json');
+}

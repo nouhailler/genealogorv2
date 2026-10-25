@@ -106,8 +106,10 @@ export function addPendingChange(
     retryCount: 0,
     status: 'pending',
   };
-  pending.push(change);
-  setVersionedItem(STORAGE_KEYS.PENDING, pending);
+  // Un tree:update contient l'arbre complet : seul le plus récent doit être rejoué
+  const kept = action === 'tree:update' ? pending.filter(c => c.action !== 'tree:update') : pending;
+  kept.push(change);
+  setVersionedItem(STORAGE_KEYS.PENDING, kept);
   return change;
 }
 

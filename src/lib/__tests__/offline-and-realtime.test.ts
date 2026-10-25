@@ -37,6 +37,16 @@ describe('Mode Hors-Ligne & Résilience (P0 - Exigence 2)', () => {
     expect(loaded.data).toEqual(payload);
   });
 
+  it('ne conserve que le dernier instantané complet de l\'arbre (tree:update) dans la file', () => {
+    addPendingChange('tree:update', { individuals: { a: 1 } });
+    addPendingChange('person:edit', { id: '@I1@' });
+    addPendingChange('tree:update', { individuals: { a: 1, b: 2 } });
+
+    const pending = getPendingChanges();
+    expect(pending.map(c => c.action)).toEqual(['person:edit', 'tree:update']);
+    expect(pending[1].payload).toEqual({ individuals: { a: 1, b: 2 } });
+  });
+
   it('met en file d\'attente les modifications effectuées hors connexion sans perte', () => {
     expect(getPendingChanges().length).toBe(0);
 
