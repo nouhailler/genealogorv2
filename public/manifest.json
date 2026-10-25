@@ -1,0 +1,28 @@
+{
+  "id": "/",
+  "name": "Genealogor — Arbre Familial & Archives",
+  "short_name": "Genealogor",
+  "description": "Plateforme moderne de généalogie collaborative, studio d'archives et partage sécurisé par branche.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#2D1B0A",
+  "background_color": "#FBF9F5",
+  "lang": "fr",
+  "categories": ["lifestyle", "education", "utilities"],
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

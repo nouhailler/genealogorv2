@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Données runtime du serveur relais (arbres familiaux) — jamais versionnées
+data/rooms/*.json
+# Fichiers de travail des outils (AI Studio, Claude Code)
+.aistudio/
+public/assets/aistudio/
+.claude/

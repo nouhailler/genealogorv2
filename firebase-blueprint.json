@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "UserProfile",
+      "description": "Profil de l'utilisateur authentifié avec Google",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "UID Firebase de l'utilisateur" },
+        "email": { "type": "string", "description": "Email du compte Google" },
+        "displayName": { "type": "string", "description": "Nom complet de l'utilisateur" },
+        "photoURL": { "type": "string", "description": "Photo de profil de l'utilisateur" },
+        "createdAt": { "type": "string", "description": "Date de création du compte" },
+        "updatedAt": { "type": "string", "description": "Date de dernière mise à jour" }
+      },
+      "required": ["uid", "email"]
+    },
+    "familyTree": {
+      "title": "FamilyTree",
+      "description": "Données d'un arbre généalogique persisté dans Firestore",
+      "type": "object",
+      "properties": {
+        "treeId": { "type": "string", "description": "Identifiant de l'arbre" },
+        "ownerId": { "type": "string", "description": "UID du créateur de l'arbre" },
+        "ownerEmail": { "type": "string", "description": "Email du créateur de l'arbre" },
+        "title": { "type": "string", "description": "Titre de l'arbre généalogique" },
+        "rootPersonId": { "type": "string", "description": "Identifiant de l'ancêtre pivot ou de cujus" },
+        "individuals": { "type": "object", "description": "Dictionnaire des individus de l'arbre" },
+        "families": { "type": "object", "description": "Dictionnaire des familles et unions de l'arbre" },
+        "updatedAt": { "type": "string", "description": "Horodatage de dernière synchronisation" },
+        "createdAt": { "type": "string", "description": "Horodatage de création" }
+      },
+      "required": ["treeId", "ownerId", "title"]
+    },
+    "archiveDocument": {
+      "title": "ArchiveDocument",
+      "description": "Document d'archive numérisé lié à l'arbre",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Identifiant unique de l'archive" },
+        "title": { "type": "string", "description": "Titre descriptif de l'acte numérisé" },
+        "type": { "type": "string", "description": "Typologie de l'acte d'archive" },
+        "archiveLocation": { "type": "string", "description": "Lieu de conservation / Archives Départementales" },
+        "callNumber": { "type": "string", "description": "Cote d'archive et numéro de vue" },
+        "date": { "type": "string", "description": "Date de l'acte" },
+        "place": { "type": "string", "description": "Commune / Paroisse de l'acte" },
+        "transcription": { "type": "string", "description": "Transcription textuelle fidèle" },
+        "notes": { "type": "string", "description": "Remarques et mentions marginales" },
+        "fileData": { "type": "string", "description": "Aperçu ou données du document numérisé" },
+        "linkedPersonIds": { "type": "array", "description": "Identifiants des individus associés" },
+        "createdBy": { "type": "string", "description": "UID de l'auteur de l'archive" },
+        "createdAt": { "type": "number", "description": "Horodatage de création" },
+        "updatedAt": { "type": "number", "description": "Horodatage de mise à jour" }
+      },
+      "required": ["id", "title", "type"]
+    },
+    "branchAccess": {
+      "title": "BranchAccess",
+      "description": "Règle d'accès et mot de passe de branche familiale",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Identifiant de la règle d'accès" },
+        "name": { "type": "string", "description": "Libellé de la branche" },
+        "branch": { "type": "string", "description": "Périmètre de la branche (paternal, maternal, all)" },
+        "role": { "type": "string", "description": "Rôle accordé (viewer, editor, admin)" },
+        "passwordHash": { "type": "string", "description": "Hachage du mot de passe de branche" },
+        "hideLiving": { "type": "boolean", "description": "Masquer les vivants" },
+        "shareToken": { "type": "string", "description": "Jeton unique pour le lien d'invitation" },
+        "createdAt": { "type": "number", "description": "Horodatage de création" }
+      },
+      "required": ["id", "name", "branch", "role", "shareToken"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "userProfile",
+      "description": "Profils des utilisateurs inscrits"
+    },
+    "/trees/{treeId}": {
+      "schema": "familyTree",
+      "description": "Arbres généalogiques partagés et persistés"
+    },
+    "/trees/{treeId}/archives/{archiveId}": {
+      "schema": "archiveDocument",
+      "description": "Fonds d'archives numérisées rattachés à un arbre"
+    },
+    "/trees/{treeId}/access/{accessId}": {
+      "schema": "branchAccess",
+      "description": "Permissions et mots de passe des branches"
+    }
+  }
+}

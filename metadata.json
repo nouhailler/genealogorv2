@@ -1,0 +1,6 @@
+{
+  "name": "Genealogor — Arbre Familial & Archives",
+  "description": "Application de généalogie collaborative avec partage sécurisé par branche, synchronisation en temps réel et gestion des archives numérisées.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

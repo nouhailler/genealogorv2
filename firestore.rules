@@ -1,0 +1,132 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'jeanpierre.nouhailler@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function treeExists(treeId) {
+      return exists(/databases/$(database)/documents/trees/$(treeId));
+    }
+
+    function getTree(treeId) {
+      return get(/databases/$(database)/documents/trees/$(treeId)).data;
+    }
+
+    function isTreeOwner(treeData) {
+      return isSignedIn() && (
+        isAdmin() ||
+        treeData.ownerId == request.auth.uid ||
+        (treeData.ownerEmail != null && treeData.ownerEmail == request.auth.token.email)
+      );
+    }
+
+    function isTreeEditor(treeData) {
+      return isSignedIn() && (
+        isAdmin() ||
+        treeData.ownerId == request.auth.uid ||
+        (treeData.ownerEmail != null && treeData.ownerEmail == request.auth.token.email) ||
+        (treeData.editors != null && request.auth.uid in treeData.editors)
+      );
+    }
+
+    function canReadTree(treeData) {
+      return isSignedIn() && (
+        isAdmin() ||
+        treeData.ownerId == request.auth.uid ||
+        (treeData.ownerEmail != null && treeData.ownerEmail == request.auth.token.email) ||
+        (treeData.editors != null && request.auth.uid in treeData.editors) ||
+        (treeData.viewers != null && request.auth.uid in treeData.viewers) ||
+        (treeData.isPublic == true)
+      );
+    }
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection test document
+    match /test/{docId} {
+      allow get: if true;
+    }
+
+    // User profiles collection
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create, update: if (isOwner(userId) || isAdmin()) && isValidId(userId)
+        && request.resource.data.uid == userId;
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+      // Family trees collection
+    match /trees/{treeId} {
+      allow get: if isSignedIn() && resource != null && canReadTree(resource.data);
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.ownerEmail != null && resource.data.ownerEmail == request.auth.token.email) ||
+        (resource.data.editors != null && request.auth.uid in resource.data.editors) ||
+        (resource.data.viewers != null && request.auth.uid in resource.data.viewers) ||
+        (resource.data.isPublic == true)
+      );
+      
+      // Authenticated users can create a tree, setting themselves as owner
+      allow create: if isSignedIn() && isValidId(treeId)
+        && (request.resource.data.ownerId == request.auth.uid || isAdmin());
+      
+      // Only owner, editors or admin can update, ownerId is immutable
+      allow update: if isSignedIn() && isValidId(treeId)
+        && (isTreeEditor(resource.data) || isAdmin())
+        && request.resource.data.ownerId == resource.data.ownerId;
+      
+      // Only the tree owner or admin can delete the entire tree
+      allow delete: if isSignedIn() && isValidId(treeId)
+        && (isTreeOwner(resource.data) || isAdmin());
+
+      // Archives subcollection: requires parent tree to exist and reader/editor permissions
+      match /archives/{archiveId} {
+        allow get, list: if isSignedIn()
+          && treeExists(treeId)
+          && canReadTree(getTree(treeId));
+
+        allow create, update, delete: if isValidId(archiveId)
+          && isSignedIn()
+          && treeExists(treeId)
+          && (isTreeEditor(getTree(treeId)) || isAdmin());
+      }
+
+      // Access rules subcollection: strictly restricted to tree owner or admin
+      // Viewers and non-owners are denied read access to avoid leaking tokens or passphrases
+      match /access/{accessId} {
+        allow get, list: if isSignedIn()
+          && treeExists(treeId)
+          && (isTreeOwner(getTree(treeId)) || isAdmin());
+
+        allow create, update, delete: if isValidId(accessId)
+          && isSignedIn()
+          && treeExists(treeId)
+          && (isTreeOwner(getTree(treeId)) || isAdmin());
+      }
+    }
+  }
+}
