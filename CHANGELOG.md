@@ -3,6 +3,14 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.18.0] — 2026-10-25
+
+### 🗺️ Amélioré — Les personnes d'une commune, directement sur la carte
+- Toucher une commune affiche sur la carte la **liste des personnes** qui y sont nées, baptisées, mariées, décédées, inhumées ou y ont résidé, avec le type et l'année de chaque événement (et le lieu-dit) ; un clic ouvre la fiche.
+- Les **5 plus récentes** d'abord (par leur dernier événement), puis « Afficher les N autres » dans une liste déroulante ; carte compacte sur mobile.
+- Nouveaux événements pris en compte : baptêmes, inhumations, résidences (filtre « Autres ») ; l'infobulle d'une commune indique le nombre de personnes au lieu du nombre d'« actes ».
+- Correction : les encarts de la carte passaient au-dessus des fenêtres de l'application (menu, fiche…).
+
 ## [2.17.0] — 2026-10-25
 
 ### 🕸️ Amélioré — Graphe des relations lisible (mobile compris)

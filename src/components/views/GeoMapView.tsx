@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { MapPin, Search, Compass, Route, ChevronRight, Loader2, Baby, Heart, Cross, X } from 'lucide-react';
+import { MapPin, Search, Compass, Route, ChevronRight, ChevronDown, ChevronUp, Loader2, Baby, Heart, Cross, X, Droplets, Landmark, Home } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { GenealogyData } from '../../types/genealogy';
@@ -16,8 +16,17 @@ interface GeoMapViewProps {
   onSelectPerson: (id: string) => void;
 }
 
-type EventType = 'birth' | 'marriage' | 'death';
-type FilterType = 'all' | EventType;
+type EventType = 'birth' | 'baptism' | 'marriage' | 'death' | 'burial' | 'residence';
+/** « other » regroupe baptêmes, inhumations et résidences */
+type FilterType = 'all' | 'birth' | 'marriage' | 'death' | 'other';
+
+const matchesType = (type: EventType, filter: FilterType) =>
+  filter === 'all' ||
+  type === filter ||
+  (filter === 'other' && (type === 'baptism' || type === 'burial' || type === 'residence'));
+
+/** Nombre de personnes visibles dans la liste d'une commune avant « Afficher les autres » */
+const PEOPLE_PREVIEW = 5;
 type MapTileStyle = 'positron' | 'osm' | 'topo';
 
 export interface PlaceEvent {
@@ -70,9 +79,43 @@ const FRANCE_CENTER: [number, number] = [46.603354, 1.888334];
 
 const EVENT_LABELS: Record<EventType, { label: string; plural: string; icon: React.ElementType; badge: string }> = {
   birth: { label: 'Naissance', plural: 'Naissances', icon: Baby, badge: 'bg-emerald-100 text-emerald-900' },
+  baptism: { label: 'Baptême', plural: 'Baptêmes', icon: Droplets, badge: 'bg-sky-100 text-sky-900' },
   marriage: { label: 'Mariage', plural: 'Mariages', icon: Heart, badge: 'bg-amber-100 text-amber-900' },
   death: { label: 'Décès', plural: 'Décès', icon: Cross, badge: 'bg-rose-100 text-rose-900' },
+  burial: { label: 'Inhumation', plural: 'Inhumations', icon: Landmark, badge: 'bg-stone-200 text-stone-800' },
+  residence: { label: 'Résidence', plural: 'Résidences', icon: Home, badge: 'bg-violet-100 text-violet-900' },
 };
+
+const FILTER_LABELS: Record<FilterType, string> = {
+  all: 'Tous',
+  birth: 'Naissances',
+  marriage: 'Mariages',
+  death: 'Décès',
+  other: 'Autres',
+};
+
+/** Personne (ou couple pour un mariage) liée à une commune, avec ses événements sur place */
+interface SitePerson {
+  key: string;
+  personId: string;
+  name: string;
+  events: PlaceEvent[];
+  /** Année la plus récente, pour trier du plus récent au plus ancien */
+  latestYear?: number;
+}
+
+function groupByPerson(events: PlaceEvent[]): SitePerson[] {
+  const byKey = new Map<string, SitePerson>();
+  for (const ev of events) {
+    const key = `${ev.personId}|${ev.personName}`;
+    const entry = byKey.get(key) || { key, personId: ev.personId, name: ev.personName, events: [] };
+    entry.events.push(ev);
+    if (ev.year && (!entry.latestYear || ev.year > entry.latestYear)) entry.latestYear = ev.year;
+    byKey.set(key, entry);
+  }
+  for (const p of byKey.values()) p.events.sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999));
+  return [...byKey.values()].sort((a, b) => (b.latestYear ?? -1) - (a.latestYear ?? -1));
+}
 
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -89,6 +132,74 @@ const siteKey = (c: GeoCoordinates) =>
 
 const GEOCODING_CONCURRENCY = 6;
 
+/**
+ * Personnes d'une commune, affichées sur la carte : les 5 plus récentes d'abord,
+ * les autres dans une liste déroulante.
+ */
+const SitePeopleCard: React.FC<{
+  site: Site;
+  people: SitePerson[];
+  onSelectPerson: (id: string) => void;
+  onClose: () => void;
+}> = ({ site, people, onSelectPerson, onClose }) => {
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? people : people.slice(0, PEOPLE_PREVIEW);
+  const hidden = people.length - PEOPLE_PREVIEW;
+  const eventCount = people.reduce((n, p) => n + p.events.length, 0);
+
+  return (
+    <div className="absolute bottom-3 left-3 right-3 sm:left-auto sm:w-80 z-[1000] max-h-[60%] sm:max-h-[78%] flex flex-col bg-white/97 dark:bg-stone-900/97 rounded-xl border border-amber-300 dark:border-amber-800 shadow-lg text-xs">
+      <div className="shrink-0 flex items-start gap-2 px-3 pt-2.5 pb-2 border-b border-stone-100 dark:border-stone-800">
+        <div className="min-w-0 flex-1">
+          <div className="font-serif text-sm font-bold text-stone-900 dark:text-stone-100 truncate">{site.name}</div>
+          <div className="text-[11px] text-stone-500">
+            {people.length} personne{people.length > 1 ? 's' : ''} · {eventCount} événement{eventCount > 1 ? 's' : ''}
+            {people.length > 1 && <span className="hidden sm:inline"> · les plus récents en premier</span>}
+          </div>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Fermer" className="shrink-0 p-1 rounded-md text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 cursor-pointer">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      <ul className="px-1.5 py-1 space-y-0.5 overflow-y-auto min-h-0 flex-1">
+        {shown.map(person => (
+          <li key={person.key}>
+            <button
+              type="button"
+              onClick={() => person.personId && onSelectPerson(person.personId)}
+              className="w-full flex items-center gap-1.5 text-left px-1.5 py-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/40 cursor-pointer"
+              title="Ouvrir la fiche"
+            >
+              {/* Nom et événements sur la même ligne quand la place le permet */}
+              <span className="min-w-0 flex-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                <span className="font-serif font-bold text-stone-900 dark:text-stone-100">{person.name}</span>
+                {person.events.map((ev, i) => (
+                  <span key={i} className={`text-[10px] px-1.5 py-px rounded ${EVENT_LABELS[ev.type].badge}`}>
+                    {EVENT_LABELS[ev.type].label}{ev.year ? ` ${ev.year}` : ''}{ev.hamlet ? ` · ${ev.hamlet}` : ''}
+                  </span>
+                ))}
+              </span>
+              <ChevronRight className="w-3 h-3 shrink-0 text-stone-400" />
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {hidden > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="shrink-0 flex items-center justify-center gap-1 px-3 py-2 border-t border-stone-100 dark:border-stone-800 font-semibold text-amber-800 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-b-xl cursor-pointer"
+        >
+          {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          <span>{expanded ? 'Réduire' : `Afficher les ${hidden} autre${hidden > 1 ? 's' : ''}`}</span>
+        </button>
+      )}
+    </div>
+  );
+};
+
 export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -96,7 +207,6 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
   const migrationLayerRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const tileOverlayRef = useRef<L.TileLayer | null>(null);
-  const detailRef = useRef<HTMLDivElement>(null);
 
   const [selectedKey, setSelectedKey] = useState<string>('');
   const [tileStyle, setTileStyle] = useState<MapTileStyle>('positron');
@@ -115,8 +225,14 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
       (map[place] ||= []).push({ ...ev, rawPlace: place, hamlet: parsePlace(place).hamlet });
     };
     for (const ind of Object.values(data.individuals || {})) {
-      add(ind.birth?.place, { type: 'birth', personName: ind.name, personId: ind.id, year: ind.birth?.parsedDate?.year, rawDate: ind.birth?.date });
-      add(ind.death?.place, { type: 'death', personName: ind.name, personId: ind.id, year: ind.death?.parsedDate?.year, rawDate: ind.death?.date });
+      const person = { personName: ind.name, personId: ind.id };
+      add(ind.birth?.place, { type: 'birth', ...person, year: ind.birth?.parsedDate?.year, rawDate: ind.birth?.date });
+      add(ind.baptism?.place, { type: 'baptism', ...person, year: ind.baptism?.parsedDate?.year, rawDate: ind.baptism?.date });
+      add(ind.death?.place, { type: 'death', ...person, year: ind.death?.parsedDate?.year, rawDate: ind.death?.date });
+      add(ind.burial?.place, { type: 'burial', ...person, year: ind.burial?.parsedDate?.year, rawDate: ind.burial?.date });
+      for (const res of ind.residences || []) {
+        add(res.place, { type: 'residence', ...person, year: res.parsedDate?.year, rawDate: res.date });
+      }
     }
     for (const fam of Object.values(data.families || {})) {
       const husb = fam.husbandId ? data.individuals[fam.husbandId] : undefined;
@@ -193,9 +309,10 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
     const q = searchQuery.trim().toLowerCase();
     if (q && !site.name.toLowerCase().includes(q) && !(site.department || '').toLowerCase().includes(q)
       && !site.hamlets.some(h => h.toLowerCase().includes(q))) return false;
-    return filterType === 'all' || site.events.some(e => e.type === filterType);
+    return site.events.some(e => matchesType(e.type, filterType));
   };
-  const countFor = (site: Site) => site.events.filter(e => filterType === 'all' || e.type === filterType).length;
+  const countFor = (site: Site) => site.events.filter(e => matchesType(e.type, filterType)).length;
+  const peopleFor = (site: Site) => groupByPerson(site.events.filter(e => matchesType(e.type, filterType)));
 
   const visibleSites = useMemo(
     () => sites.filter(matchesFilters).sort((a, b) => countFor(b) - countFor(a)),
@@ -259,8 +376,9 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
         fillColor: isSelected ? '#b45309' : '#92400e',
         fillOpacity: isSelected ? 0.95 : 0.7,
       });
+      const peopleCount = peopleFor(site).length;
       marker.bindTooltip(
-        `<strong>${escapeHtml(site.name)}</strong> · ${count} acte${count > 1 ? 's' : ''}`,
+        `<strong>${escapeHtml(site.name)}</strong> · ${peopleCount} personne${peopleCount > 1 ? 's' : ''}`,
         { direction: 'top', offset: [0, -6], permanent: isSelected, className: 'genealogor-map-label' }
       );
       marker.on('click', () => setSelectedKey(site.key));
@@ -299,9 +417,9 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
     mapRef.current?.flyTo([site.coords.lat, site.coords.lng], Math.max(mapRef.current.getZoom(), 10), { duration: 0.8 });
   };
 
-  const selectedEvents = selectedSite
-    ? selectedSite.events.filter(e => filterType === 'all' || e.type === filterType)
-    : [];
+  const selectedEvents = selectedSite ? selectedSite.events.filter(e => matchesType(e.type, filterType)) : [];
+  const selectedPeople = selectedSite ? peopleFor(selectedSite) : [];
+  const hasOtherEvents = Object.values(eventsByRawPlace).some(list => list.some(e => matchesType(e.type, 'other')));
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 space-y-4">
@@ -312,7 +430,7 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
           <div>
             <h1 className="font-serif text-2xl font-bold text-stone-900 dark:text-stone-100">Carte des lieux de la famille</h1>
             <p className="text-xs text-stone-600 dark:text-stone-400 mt-0.5">
-              {sites.length} commune{sites.length > 1 ? 's' : ''} · {totalEvents} acte{totalEvents > 1 ? 's' : ''} (naissances, mariages, décès)
+              {sites.length} commune{sites.length > 1 ? 's' : ''} · {totalEvents} événement{totalEvents > 1 ? 's' : ''} (naissances, mariages, décès et autres)
               {unlocatedPlaces.length > 0 && ` · ${unlocatedPlaces.length} lieu${unlocatedPlaces.length > 1 ? 'x' : ''} non localisé${unlocatedPlaces.length > 1 ? 's' : ''}`}
             </p>
           </div>
@@ -325,8 +443,8 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center p-0.5 bg-stone-100 dark:bg-stone-800 rounded-xl text-xs" role="group" aria-label="Type d'acte">
-            {(['all', 'birth', 'marriage', 'death'] as const).map(type => (
+          <div className="flex items-center p-0.5 bg-stone-100 dark:bg-stone-800 rounded-xl text-xs" role="group" aria-label="Type d'événement">
+            {(['all', 'birth', 'marriage', 'death', 'other'] as FilterType[]).filter(t => t !== 'other' || hasOtherEvents).map(type => (
               <button
                 key={type}
                 type="button"
@@ -336,7 +454,7 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
                   filterType === type ? 'bg-amber-900 text-white' : 'text-stone-700 dark:text-stone-300 hover:text-stone-950'
                 }`}
               >
-                {type === 'all' ? 'Tous' : EVENT_LABELS[type].plural}
+                {FILTER_LABELS[type]}
               </button>
             ))}
           </div>
@@ -368,7 +486,8 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
 
         {/* Carte */}
         <div className="lg:col-span-7">
-          <div className="relative bg-stone-100 border border-stone-300/80 dark:border-stone-700 rounded-2xl overflow-hidden shadow-sm h-[420px] sm:h-[560px]">
+          {/* isolate : les calques de la carte (z-index élevés de Leaflet et des encarts) restent sous les fenêtres de l'application */}
+          <div className="relative isolate bg-stone-100 border border-stone-300/80 dark:border-stone-700 rounded-2xl overflow-hidden shadow-sm h-[420px] sm:h-[560px]">
             <div ref={mapContainerRef} className="w-full h-full z-0" />
 
             {/* Options d'affichage */}
@@ -398,46 +517,35 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
             <div className={`absolute bottom-3 left-3 z-[1000] bg-white/95 px-2.5 py-1.5 rounded-lg border border-stone-200 shadow-sm text-[11px] text-stone-600 items-center gap-2 ${selectedSite ? 'hidden lg:flex' : 'flex'}`}>
               <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-800/70" />
               <span className="inline-block w-4 h-4 rounded-full bg-amber-800/70" />
-              <span>Taille = nombre d'actes</span>
+              <span>Taille = nombre d'événements</span>
             </div>
 
-            {/* Commune sélectionnée (rappel sur la carte) */}
+            {/* Commune sélectionnée : ses habitants (naissance, mariage, décès, autres événements) */}
             {selectedSite && (
-              <div className="absolute bottom-3 right-3 z-[1000] max-w-[70%] flex items-center gap-2 bg-white/95 pl-3 pr-1 py-1 rounded-xl border border-amber-300 shadow-md text-xs">
-                <span className="font-serif font-bold text-stone-900 truncate">{selectedSite.name}</span>
-                <button
-                  type="button"
-                  onClick={() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                  className="lg:hidden shrink-0 px-2 py-1 rounded-lg bg-amber-900 text-white font-semibold cursor-pointer"
-                >
-                  Voir les actes
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedKey('')}
-                  aria-label="Désélectionner"
-                  className="shrink-0 p-1 rounded-md text-stone-500 hover:bg-stone-100 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              <SitePeopleCard
+                key={`${selectedSite.key}|${filterType}`}
+                site={selectedSite}
+                people={selectedPeople}
+                onSelectPerson={onSelectPerson}
+                onClose={() => setSelectedKey('')}
+              />
             )}
           </div>
         </div>
 
         {/* Détail de la commune et liste */}
         <div className="lg:col-span-5 space-y-4">
-          <div ref={detailRef} className="scroll-mt-32">
+          <div>
             {selectedSite ? (
               <div className="bg-white dark:bg-[#1A1D24] border border-amber-300 dark:border-amber-800 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3">
                 <div>
                   <h2 className="font-serif text-xl font-bold text-stone-900 dark:text-stone-100">{selectedSite.name}</h2>
                   <p className="text-xs text-stone-500">
                     {selectedSite.department ? `${selectedSite.department} · ` : ''}
-                    {selectedEvents.length} acte{selectedEvents.length > 1 ? 's' : ''}
-                    {(['birth', 'marriage', 'death'] as EventType[]).map(t => {
-                      const n = selectedSite.events.filter(e => e.type === t).length;
-                      return n > 0 && filterType === 'all' ? ` · ${n} ${EVENT_LABELS[t].plural.toLowerCase()}` : '';
+                    {selectedPeople.length} personne{selectedPeople.length > 1 ? 's' : ''} · {selectedEvents.length} événement{selectedEvents.length > 1 ? 's' : ''}
+                    {(Object.keys(EVENT_LABELS) as EventType[]).map(t => {
+                      const n = selectedEvents.filter(e => e.type === t).length;
+                      return n > 0 ? ` · ${n} ${EVENT_LABELS[t].plural.toLowerCase()}` : '';
                     })}
                   </p>
                   {selectedSite.hamlets.length > 0 && (
@@ -480,7 +588,7 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
 
           <div className="bg-white dark:bg-[#1A1D24] border border-stone-200 dark:border-stone-800 rounded-2xl p-4 shadow-2xs space-y-2">
             <span className="text-xs font-bold font-serif text-stone-900 dark:text-stone-100 block">
-              Communes ({visibleSites.length}) · par nombre d'actes
+              Communes ({visibleSites.length}) · par nombre d'événements
             </span>
             <ul className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
               {visibleSites.length === 0 && (
@@ -524,7 +632,7 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
                 </summary>
                 <ul className="mt-1 space-y-0.5 pl-3 list-disc">
                   {unlocatedPlaces.map(p => (
-                    <li key={p}>{p} ({eventsByRawPlace[p].length} acte{eventsByRawPlace[p].length > 1 ? 's' : ''})</li>
+                    <li key={p}>{p} ({eventsByRawPlace[p].length} événement{eventsByRawPlace[p].length > 1 ? 's' : ''})</li>
                   ))}
                 </ul>
               </details>
