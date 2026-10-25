@@ -7,9 +7,11 @@ interface StatsViewProps {
   data: GenealogyData;
   archiveCount: number;
   onSelectPerson?: (personId: string) => void;
+  /** Contrôle de cohérence chronologique (administrateur uniquement) */
+  showQualityChecks?: boolean;
 }
 
-export const StatsView: React.FC<StatsViewProps> = ({ data, archiveCount, onSelectPerson }) => {
+export const StatsView: React.FC<StatsViewProps> = ({ data, archiveCount, onSelectPerson, showQualityChecks = true }) => {
   const individuals = Object.values(data.individuals);
   const families = Object.values(data.families);
 
@@ -194,6 +196,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ data, archiveCount, onSele
       </div>
 
       {/* Audit de Cohérence Chronologique */}
+      {showQualityChecks && (
       <div className="bg-white p-6 rounded-2xl border border-stone-200/80 shadow-xs space-y-4">
         <div className="flex items-center justify-between border-b border-stone-100 pb-3">
           <div className="flex items-center gap-2">
@@ -234,6 +237,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ data, archiveCount, onSele
           </div>
         )}
       </div>
+      )}
 
     </div>
   );

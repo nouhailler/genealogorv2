@@ -3,6 +3,13 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.11.1] — 2026-10-25
+
+### 👁️ Modifié — Interface épurée en mode lecture seule
+- Profil Lecteur (lien de partage) : le bouton « ▾ Gérer » est remplacé par le seul titre de l'arbre, le bouton « Partager » est masqué.
+- Le bandeau « Contrôle de cohérence », la section « Contrôle de Cohérence Chronologique » des statistiques et l'outil « Contrôle Qualité & Cycles » sont réservés à l'administrateur.
+- Menu latéral du lecteur : plus d'accès à la gestion des arbres, aux liens de partage ni à l'identifiant technique du salon.
+
 ## [2.11.0] — 2026-10-25
 
 ### 🔔 Ajouté — Alertes de modification de l'arbre

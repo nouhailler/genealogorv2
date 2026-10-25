@@ -95,11 +95,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </button>
 
-          {onOpenTreeManager && (
+          {/* Lecteur : titre seul, la gestion des arbres est réservée à l'administrateur */}
+          {userRole !== 'admin' && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold text-stone-800 dark:text-stone-200 bg-stone-100/80 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700">
+              <FolderTree className="w-3.5 h-3.5 text-amber-800 dark:text-amber-400" />
+              <span className="truncate max-w-[160px]">{treeTitle}</span>
+            </span>
+          )}
+
+          {onOpenTreeManager && userRole === 'admin' && (
             <button
               type="button"
               onClick={onOpenTreeManager}
-              title={userRole === 'admin' ? "Gérer mes arbres généalogiques (Créer, Changer, Supprimer)" : "Changer d'arbre généalogique"}
+              title="Gérer mes arbres généalogiques (Créer, Changer, Supprimer)"
               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold text-stone-800 dark:text-stone-200 bg-amber-50/90 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-300/80 dark:border-amber-800 transition-all cursor-pointer shadow-2xs group"
             >
               <FolderTree className="w-3.5 h-3.5 text-amber-800 dark:text-amber-400 group-hover:scale-105 transition-transform" />
@@ -219,14 +227,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Settings className="w-4 h-4" />
           </button>
 
-          {/* Bouton de partage sécurisé */}
-          <button
-            onClick={onOpenShareModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold tracking-wide text-white bg-amber-900 hover:bg-amber-950 dark:bg-amber-800 dark:hover:bg-amber-700 active:scale-98 rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Partager</span>
-          </button>
+          {/* Bouton de partage sécurisé (administrateur uniquement) */}
+          {userRole === 'admin' && (
+            <button
+              onClick={onOpenShareModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold tracking-wide text-white bg-amber-900 hover:bg-amber-950 dark:bg-amber-800 dark:hover:bg-amber-700 active:scale-98 rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Partager</span>
+            </button>
+          )}
 
           {/* User Auth with Google */}
           {currentUser ? (

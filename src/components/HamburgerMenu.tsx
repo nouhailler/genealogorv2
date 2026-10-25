@@ -115,7 +115,7 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 {currentTreeTitle || currentRoomId || 'Mon Arbre'}
               </h3>
               <div className="flex items-center gap-2 text-[11px] text-stone-500 dark:text-stone-400 font-mono mt-0.5">
-                <span>Salon: {currentRoomId}</span>
+                {userRole === 'admin' && <span>Salon: {currentRoomId}</span>}
                 {personCount !== undefined && (
                   <>
                     <span>•</span>
@@ -125,17 +125,19 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onOpenTreeManager();
-              }}
-              className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold bg-amber-900 hover:bg-amber-950 dark:bg-amber-800 dark:hover:bg-amber-700 text-white flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
-            >
-              <FolderTree className="w-4 h-4" />
-              <span>{userRole === 'admin' ? "Créer / Changer d'Arbre" : "Changer d'Arbre"}</span>
-            </button>
+            {userRole === 'admin' && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenTreeManager();
+                }}
+                className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold bg-amber-900 hover:bg-amber-950 dark:bg-amber-800 dark:hover:bg-amber-700 text-white flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+              >
+                <FolderTree className="w-4 h-4" />
+                <span>Créer / Changer d'Arbre</span>
+              </button>
+            )}
           </div>
 
           {/* CATÉGORIE 1 : EXPLORATION GÉNÉALOGIQUE */}
@@ -146,22 +148,24 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             </span>
 
             <div className="space-y-1 bg-white/70 dark:bg-stone-900/40 p-1.5 rounded-xl border border-stone-200/70 dark:border-stone-800/80">
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onOpenTreeManager();
-                }}
-                className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800/60 text-stone-700 dark:text-stone-300 transition-colors cursor-pointer text-xs"
-              >
-                <div className="flex items-center gap-2.5">
-                  <FolderTree className="w-4 h-4 text-amber-800 dark:text-amber-400" />
-                  <span>Gestionnaire Multi-Arbres</span>
-                </div>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
-                  Changer
-                </span>
-              </button>
+              {userRole === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenTreeManager();
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800/60 text-stone-700 dark:text-stone-300 transition-colors cursor-pointer text-xs"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <FolderTree className="w-4 h-4 text-amber-800 dark:text-amber-400" />
+                    <span>Gestionnaire Multi-Arbres</span>
+                  </div>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
+                    Changer
+                  </span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => navigateTo('tree')}
@@ -312,19 +316,21 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 {activeTab === 'implex' && <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />}
               </button>
 
-              <button
-                type="button"
-                onClick={() => navigateTo('validation')}
-                className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-colors cursor-pointer ${
-                  activeTab === 'validation' ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-950 dark:text-amber-200 font-semibold' : 'hover:bg-stone-100 dark:hover:bg-stone-800/60 text-stone-700 dark:text-stone-300'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <ShieldCheck className="w-4 h-4 text-red-700 dark:text-red-400" />
-                  <span>Contrôle Qualité & Cycles</span>
-                </div>
-                {activeTab === 'validation' && <span className="w-1.5 h-1.5 rounded-full bg-red-600" />}
-              </button>
+              {userRole === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => navigateTo('validation')}
+                  className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-colors cursor-pointer ${
+                    activeTab === 'validation' ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-950 dark:text-amber-200 font-semibold' : 'hover:bg-stone-100 dark:hover:bg-stone-800/60 text-stone-700 dark:text-stone-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <ShieldCheck className="w-4 h-4 text-red-700 dark:text-red-400" />
+                    <span>Contrôle Qualité & Cycles</span>
+                  </div>
+                  {activeTab === 'validation' && <span className="w-1.5 h-1.5 rounded-full bg-red-600" />}
+                </button>
+              )}
 
               {onOpenDeptDirectory && (
                 <button
@@ -385,31 +391,33 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             </div>
           </div>
 
-          {/* CATÉGORIE 3 : SÉCURITÉ & PARTAGE PAR BRANCHE */}
-          <div className="space-y-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-400 flex items-center gap-1.5 px-2">
-              <Shield className="w-3.5 h-3.5" />
-              Partage Sécurisé & Branches
-            </span>
+          {/* CATÉGORIE 3 : SÉCURITÉ & PARTAGE PAR BRANCHE (administrateur) */}
+          {userRole === 'admin' && (
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-400 flex items-center gap-1.5 px-2">
+                <Shield className="w-3.5 h-3.5" />
+                Partage Sécurisé & Branches
+              </span>
 
-            <div className="p-3 bg-white/70 dark:bg-stone-900/40 rounded-xl border border-stone-200/70 dark:border-stone-800/80 space-y-2">
-              <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
-                Générez des liens privés par branche protégés par hachage PBKDF2 sans compte obligatoire pour vos cousins.
-              </p>
+              <div className="p-3 bg-white/70 dark:bg-stone-900/40 rounded-xl border border-stone-200/70 dark:border-stone-800/80 space-y-2">
+                <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
+                  Générez des liens privés par branche protégés par hachage PBKDF2 sans compte obligatoire pour vos cousins.
+                </p>
 
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onOpenShareModal();
-                }}
-                className="w-full py-2 px-3 rounded-lg text-xs font-semibold bg-amber-900 hover:bg-amber-950 text-white flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-                <span>Gérer les Liens & Mots de Passe</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenShareModal();
+                  }}
+                  className="w-full py-2 px-3 rounded-lg text-xs font-semibold bg-amber-900 hover:bg-amber-950 text-white flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Gérer les Liens & Mots de Passe</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* CATÉGORIE 4 : DONNÉES & SAUVEGARDES */}
           <div className="space-y-2">

@@ -1311,7 +1311,8 @@ export default function App() {
       </div>
 
       {/* Anomalies alert bar if any detected */}
-      {anomalies.length > 0 && activeTab === 'tree' && (
+      {/* Contrôle de cohérence : information de travail réservée à l'administrateur */}
+      {userRole === 'admin' && anomalies.length > 0 && activeTab === 'tree' && (
         <div className="bg-amber-50 border-b border-amber-200/80 px-4 md:px-8 py-2 text-xs text-amber-900 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-800 shrink-0" />
@@ -1434,7 +1435,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'validation' && (
+        {activeTab === 'validation' && userRole === 'admin' && (
           <ValidationView
             individuals={effectiveData.individuals}
             families={effectiveData.families}
@@ -1509,6 +1510,7 @@ export default function App() {
           <StatsView
             data={effectiveData}
             archiveCount={archives.length}
+            showQualityChecks={userRole === 'admin'}
             onSelectPerson={(id) => {
               setSelectedPersonId(id);
               setActiveTab('profile');
