@@ -1,0 +1,8 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-genealogorarbref-e97e8609-ada5-4b56-bbbe-863fc83c3d4b",
+      "rules": "firestore.rules"
+    }
+  ]
+}

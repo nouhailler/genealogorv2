@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
-import { X, Lock, Link, Copy, Check, Shield, Users, Eye, Edit3, Trash2, Key } from 'lucide-react';
+import { X, Lock, Copy, Check, Shield, Eye, Trash2, Key, AlertTriangle, LogIn } from 'lucide-react';
 import { BranchAccess, BranchRole, BranchScope, GenealogyData } from '../types/genealogy';
 import { hashPassword } from '../lib/crypto';
+import {
+  generateSecureShareToken,
+  generateShareKey,
+  wrapShareKey,
+  buildShareUrl,
+  isFirestoreShare,
+} from '../lib/share-snapshot';
 
 
 interface ShareModalProps {
@@ -10,8 +17,12 @@ interface ShareModalProps {
   data: GenealogyData;
   roomId: string;
   accessList: BranchAccess[];
-  onAddAccess: (access: BranchAccess) => void;
+  /** Publie le lien (instantané Firestore) ; rejette en cas d'échec */
+  onAddAccess: (access: BranchAccess) => Promise<void>;
   onDeleteAccess: (id: string) => void;
+  /** Connecté avec Google : condition pour publier un lien dans Firestore */
+  isCloudReady: boolean;
+  onLogin?: () => void;
   rootPersonId: string;
   userRole?: BranchRole;
 }
@@ -26,78 +37,65 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   onDeleteAccess,
   rootPersonId,
   userRole = 'viewer',
+  isCloudReady,
+  onLogin,
 }) => {
   const [branch, setBranch] = useState<BranchScope>('paternal');
-  const [role, setRole] = useState<BranchRole>('viewer');
   const [accessName, setAccessName] = useState('');
   const [password, setPassword] = useState('');
   const [hideLiving, setHideLiving] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [copiedQuickReader, setCopiedQuickReader] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const rootPerson = data.individuals[rootPersonId];
+  // Les liens Firestore donnent un accès en consultation seule
+  const role: BranchRole = 'viewer';
+
+  const createLink = async (opts: { branch: BranchScope; name: string; password: string; hideLiving: boolean }) => {
+    if (userRole !== 'admin' || !isCloudReady) return;
+    setIsPublishing(true);
+    setPublishError(null);
+    try {
+      const pwd = opts.password.trim();
+      const shareKey = generateShareKey();
+      const newAccess: BranchAccess = {
+        id: 'acc-' + Date.now(),
+        name: opts.name,
+        branch: opts.branch,
+        rootPersonId,
+        role,
+        passwordHash: pwd ? await hashPassword(pwd) : undefined,
+        hideLiving: opts.hideLiving,
+        shareToken: generateSecureShareToken(),
+        shareKey,
+        wrappedKey: pwd ? await wrapShareKey(shareKey, pwd) : undefined,
+        createdAt: Date.now(),
+      };
+      await onAddAccess(newAccess);
+      setAccessName('');
+      setPassword('');
+    } catch (err: any) {
+      setPublishError(err?.message || 'La publication du lien a échoué.');
+    } finally {
+      setIsPublishing(false);
+    }
+  };
 
   const handleCreateLink = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (userRole !== 'admin') return;
-    const defaultName = branch === 'paternal' 
-      ? 'Branche Paternelle (Cousins côté père)' 
-      : branch === 'maternal' 
-        ? 'Branche Maternelle (Cousins côté mère)' 
+    const defaultName = branch === 'paternal'
+      ? 'Branche Paternelle (Cousins côté père)'
+      : branch === 'maternal'
+        ? 'Branche Maternelle (Cousins côté mère)'
         : 'Famille Élargie (Arbre complet)';
-
-    // Jeton d'invitation unique vérifié côté serveur
-    const token = 'inv-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 12);
-
-    let pwdHash = '';
-    if (password.trim()) {
-      pwdHash = await hashPassword(password.trim());
-    }
-
-    const newAccess: BranchAccess = {
-      id: 'acc-' + Date.now(),
-      name: accessName.trim() || defaultName,
-      branch,
-      rootPersonId,
-      role,
-      passwordHash: pwdHash || undefined,
-      hideLiving,
-      shareToken: token,
-      createdAt: Date.now(),
-    };
-
-    onAddAccess(newAccess);
-    setAccessName('');
-    setPassword('');
+    await createLink({ branch, name: accessName.trim() || defaultName, password, hideLiving });
   };
 
   const getShareUrl = (access: BranchAccess) => {
     if (typeof window === 'undefined') return '';
-    const base = window.location.origin + window.location.pathname;
-    const params = new URLSearchParams();
-    params.set('room', roomId);
-    params.set('token', access.shareToken);
-    params.set('branch', access.branch);
-    params.set('role', access.role);
-    return `${base}?${params.toString()}`;
-  };
-
-  const getDirectReaderUrl = () => {
-    if (typeof window === 'undefined') return '';
-    const base = window.location.origin + window.location.pathname;
-    const params = new URLSearchParams();
-    params.set('room', roomId);
-    params.set('role', 'viewer');
-    return `${base}?${params.toString()}`;
-  };
-
-  const copyQuickReaderUrl = () => {
-    const url = getDirectReaderUrl();
-    navigator.clipboard.writeText(url);
-    setCopiedQuickReader(true);
-    setTimeout(() => setCopiedQuickReader(false), 2500);
+    return buildShareUrl(window.location.origin + window.location.pathname, access);
   };
 
   const copyToClipboard = (access: BranchAccess) => {
@@ -135,52 +133,44 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Section Profils & Règle d'accès par défaut */}
-          <div className="p-4 bg-amber-50/80 border border-amber-200/90 rounded-xl space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
-                    <Eye className="w-4 h-4 text-amber-800" />
-                    <span>Partage Express — Profil Lecteur (par défaut)</span>
-                  </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-200/70 text-amber-900 font-bold">
-                    Recommandé
-                  </span>
-                </div>
-                <p className="text-xs text-stone-700 leading-relaxed">
-                  Lorsque vous partagez votre arbre avec des membres de la famille, le destinataire reçoit <strong>par défaut le Profil Lecteur</strong> (consultation de l'arbre). <strong>En aucun cas le profil lecteur ne peut créer un arbre</strong> ni altérer les données existantes.
-                </p>
-              </div>
-            </div>
-
-            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              <button
-                type="button"
-                onClick={copyQuickReaderUrl}
-                className={`flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-all shadow-xs cursor-pointer ${
-                  copiedQuickReader
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-amber-900 hover:bg-amber-950 text-white'
-                }`}
-              >
-                {copiedQuickReader ? (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>Lien Lecteur copié !</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4" />
-                    <span>Copier le lien direct de consultation (Profil Lecteur)</span>
-                  </>
-                )}
-              </button>
-              <span className="text-[11px] font-mono text-stone-500 truncate">
-                ?room={roomId}&role=viewer
-              </span>
-            </div>
+          {/* Fonctionnement des liens */}
+          <div className="p-4 bg-amber-50/80 border border-amber-200/90 rounded-xl space-y-2 text-xs text-stone-700 leading-relaxed">
+            <span className="font-bold text-amber-950 flex items-center gap-1.5">
+              <Eye className="w-4 h-4 text-amber-800" />
+              <span>Liens de consultation (lecture seule)</span>
+            </span>
+            <p>
+              Chaque lien publie une copie <strong>chiffrée</strong> de la branche choisie, mise à jour automatiquement à chaque modification de l'arbre.
+              Le destinataire n'a besoin d'aucun compte. Sans mot de passe, la clé est contenue dans le lien lui-même : ne le diffusez qu'aux personnes concernées.
+              Les images des archives ne sont pas incluses.
+            </p>
           </div>
+
+          {userRole === 'admin' && !isCloudReady && (
+            <div className="p-4 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <span className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-sky-700" />
+                <span>Connectez-vous avec Google pour créer des liens : la copie partagée est publiée dans votre espace Firestore.</span>
+              </span>
+              {onLogin && (
+                <button
+                  type="button"
+                  onClick={onLogin}
+                  className="flex items-center justify-center gap-1.5 px-3 py-1.5 font-semibold rounded-lg bg-sky-700 hover:bg-sky-800 text-white shrink-0 cursor-pointer"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Se connecter avec Google</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {publishError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{publishError}</span>
+            </div>
+          )}
 
           {userRole !== 'admin' ? (
             <div className="p-4 bg-stone-100/90 border border-stone-200 rounded-xl text-xs text-stone-700 flex items-center gap-2.5">
@@ -244,23 +234,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 </div>
               </div>
 
-              {/* Rôle & permissions */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-stone-700 mb-1">
-                    Profil attribué au destinataire
-                  </label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as BranchRole)}
-                    className="w-full text-xs bg-stone-50 border border-stone-200 rounded-lg p-2 text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-700"
-                  >
-                    <option value="viewer">Profil Lecteur (par défaut — consultation seule, création d'arbre interdite)</option>
-                    <option value="editor">Profil Éditeur (modifications de données, création interdite)</option>
-                    <option value="admin">Profil Administrateur / Créateur (gestion complète et création)</option>
-                  </select>
-                </div>
-
+              {/* Mot de passe */}
+              <div className="grid grid-cols-1 gap-3">
               <div>
                 <label className="block text-xs font-medium text-stone-700 mb-1">
                   Mot de passe commun de la branche (Optionnel mais recommandé)
@@ -303,9 +278,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
             <button
               type="submit"
-              className="w-full py-2 px-4 text-xs font-semibold text-white bg-amber-900 hover:bg-amber-950 rounded-lg shadow-sm transition-all"
+              disabled={!isCloudReady || isPublishing}
+              className="w-full py-2 px-4 text-xs font-semibold text-white bg-amber-900 hover:bg-amber-950 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-all cursor-pointer"
             >
-              Créer le lien sécurisé
+              {isPublishing ? 'Publication du lien…' : 'Créer le lien sécurisé'}
             </button>
           </form>
           )}
@@ -340,11 +316,18 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                           </span>
                         </div>
 
+                        {!isFirestoreShare(access) && (
+                          <div className="text-[11px] text-rose-700 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>Ancien lien : il n'affiche aucune donnée sur cet hébergement. Supprimez-le et créez-en un nouveau.</span>
+                          </div>
+                        )}
+
                         <div className="text-[11px] text-stone-500 flex items-center gap-2">
-                          {access.password && (
-                            <span className="flex items-center gap-1 font-mono text-stone-700">
+                          {(access.wrappedKey || access.passwordHash || access.password) && (
+                            <span className="flex items-center gap-1 text-stone-700">
                               <Lock className="w-3 h-3 text-amber-700" />
-                              <span>Code: {access.password}</span>
+                              <span>Protégé par mot de passe</span>
                             </span>
                           )}
                           <span>·</span>
@@ -355,6 +338,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => copyToClipboard(access)}
+                          disabled={!isFirestoreShare(access)}
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                             copiedId === access.id
                               ? 'bg-emerald-600 text-white shadow-xs'

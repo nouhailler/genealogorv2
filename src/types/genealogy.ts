@@ -148,6 +148,10 @@ export interface BranchAccess {
   passwordHash?: string;
   hideLiving: boolean;
   shareToken: string;
+  /** Clé de contenu AES de l'instantané Firestore `/shares/{shareToken}` (connue du seul créateur) */
+  shareKey?: string;
+  /** Clé de contenu chiffrée par le mot de passe du lien (publiée avec l'instantané) */
+  wrappedKey?: string;
   revoked?: boolean;
   createdAt: number;
 }

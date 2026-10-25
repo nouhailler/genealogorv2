@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db, OperationType, handleFirestoreError } from './firebase';
 import { GenealogyData, ArchiveDocument, BranchAccess } from '../types/genealogy';
+import type { ShareDocument } from './share-snapshot';
 import { User } from 'firebase/auth';
 
 export async function saveTreeToFirestore(
@@ -143,9 +144,63 @@ export async function deleteTreeFromFirestore(
     }
     const treeRef = doc(db, 'trees', treeId);
     await deleteDoc(treeRef);
+    await deleteSharesOfTree(treeId, currentUser);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
+}
+
+/**
+ * Publie (ou remplace) l'instantané chiffré d'un lien de partage : `/shares/{jeton}`.
+ */
+export async function publishShareToFirestore(
+  token: string,
+  shareDoc: ShareDocument,
+  currentUser: User | null
+): Promise<void> {
+  if (!currentUser) throw new Error('Connexion Google requise pour publier un lien de partage.');
+  const path = `shares/${token}`;
+  try {
+    await setDoc(doc(db, 'shares', token), shareDoc);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteShareFromFirestore(token: string, currentUser: User | null): Promise<void> {
+  if (!currentUser) return;
+  const path = `shares/${token}`;
+  try {
+    await deleteDoc(doc(db, 'shares', token));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+/** Supprime tous les liens de partage publiés pour un arbre (suppression de l'arbre) */
+export async function deleteSharesOfTree(treeId: string, currentUser: User | null): Promise<void> {
+  if (!currentUser) return;
+  const snap = await getDocs(query(
+    collection(db, 'shares'),
+    where('ownerId', '==', currentUser.uid),
+    where('treeId', '==', treeId)
+  ));
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+}
+
+/**
+ * Lecture publique d'un instantané par son jeton (aucune connexion requise), avec mises à jour en direct.
+ */
+export function subscribeToShare(
+  token: string,
+  onUpdate: (shareDoc: ShareDocument | null) => void,
+  onError: (error: unknown) => void
+): () => void {
+  return onSnapshot(
+    doc(db, 'shares', token),
+    snap => onUpdate(snap.exists() ? (snap.data() as ShareDocument) : null),
+    onError
+  );
 }
 
 export function subscribeToArchives(

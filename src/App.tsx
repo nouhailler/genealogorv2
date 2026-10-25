@@ -17,6 +17,19 @@ import { OnboardingModal, hasAcceptedOnboarding } from './components/OnboardingM
 import { ContextualGuide } from './components/ContextualGuide';
 import { TreeManagerModal } from './components/TreeManagerModal';
 import { FirstTimeTreeWizard } from './components/FirstTimeTreeWizard';
+import { SharedLinkStatus } from './components/SharedLinkStatus';
+import {
+  readShareParams,
+  buildShareSnapshot,
+  snapshotFingerprint,
+  sealSnapshot,
+  openSnapshot,
+  unwrapShareKey,
+  isFirestoreShare,
+  stripShareSecrets,
+  SHARE_FORMAT_VERSION,
+  ShareDocument,
+} from './lib/share-snapshot';
 import { FanChartView } from './components/views/FanChartView';
 import { DescendantsView } from './components/views/DescendantsView';
 import { ImplexView } from './components/views/ImplexView';
@@ -80,17 +93,33 @@ import {
   saveAccessToFirestore, 
   deleteAccessFromFirestore,
   subscribeToAccessList,
-  clearTreeFromFirestore
+  clearTreeFromFirestore,
+  publishShareToFirestore,
+  deleteShareFromFirestore,
+  subscribeToShare
 } from './lib/firestore-sync';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { Shield, Sparkles, Database, GitMerge, AlertTriangle, Trash2 } from 'lucide-react';
 
+// Lien de partage Firestore (`?share=<jeton>#k=<clé>`) : consultation en lecture seule, sans compte
+const SHARE_PARAMS = typeof window !== 'undefined'
+  ? readShareParams(window.location.search, window.location.hash)
+  : null;
+
+type SharedViewState =
+  | { status: 'loading' }
+  | { status: 'locked'; doc: ShareDocument }
+  | { status: 'ready'; title: string; shareName: string; generatedAt: string }
+  | { status: 'missing' | 'no-key' | 'error'; message?: string };
+
 export default function App() {
+  const isSharedView = Boolean(SHARE_PARAMS);
   // Real-time synchronization state & Active tree room
   const [roomId, setRoomId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const roomParam = urlParams.get('room');
+      if (SHARE_PARAMS) return `shared-${SHARE_PARAMS.token}`;
       if (roomParam) return roomParam;
     }
     return getStoredCurrentRoom();
@@ -135,7 +164,7 @@ export default function App() {
   const [isFirstTreeWizardOpen, setIsFirstTreeWizardOpen] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     const urlParams = new URLSearchParams(window.location.search);
-    return !urlParams.get('room') && !urlParams.get('token') && isFirstAppUse();
+    return !SHARE_PARAMS && !urlParams.get('room') && !urlParams.get('token') && isFirstAppUse();
   });
 
   // Thème Sombre / Clair / Système
@@ -198,7 +227,7 @@ export default function App() {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       // Pas de marquage implicite tant que l'assistant de premier arbre n'a pas été complété
-      if (!urlParams.get('room') && !urlParams.get('token') && !isFirstTreeWizardOpen) {
+      if (!SHARE_PARAMS && !urlParams.get('room') && !urlParams.get('token') && !isFirstTreeWizardOpen) {
         markTreeCreatedLocally(roomId);
       }
     }
@@ -212,6 +241,11 @@ export default function App() {
   // Changement / Création d'arbre généalogique fluide
   const handleSwitchTree = async (newRoomId: string, newTitle?: string, initialData?: GenealogyData) => {
     if (!newRoomId) return;
+    if (isSharedView && !initialData) {
+      // Quitter la consultation d'un lien partagé pour revenir à ses propres arbres
+      window.location.href = `${window.location.pathname}?room=${encodeURIComponent(newRoomId)}`;
+      return;
+    }
     setRoomId(newRoomId);
     setStoredCurrentRoom(newRoomId);
 
@@ -317,7 +351,7 @@ export default function App() {
 
   // 2. Subscribe to Firestore ONLY when auth is ready and user is authenticated
   useEffect(() => {
-    if (!authReady || !currentUser || !roomId) return;
+    if (isSharedView || !authReady || !currentUser || !roomId) return;
 
     const unsubTree = subscribeToTree(
       roomId, 
@@ -410,6 +444,8 @@ export default function App() {
 
   // 4. Initialisation sécurisée de la connexion WebSocket temps réel
   useEffect(() => {
+    // Vue partagée : instantané Firestore uniquement, aucun relais temps réel
+    if (isSharedView) return;
     let isCancelled = false;
     const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
     const invitationToken = urlParams?.get('token') || pendingBranchAccess?.shareToken || '';
@@ -646,6 +682,8 @@ export default function App() {
 
   // Branch & privacy filtering: get active tree data for current viewer
   const effectiveData = useMemo(() => {
+    // L'instantané partagé est déjà filtré (branche) et anonymisé selon le choix du créateur
+    if (isSharedView) return data;
     const rootId = data.rootPersonId || Object.keys(data.individuals)[0] || '';
     if (userRole === 'admin' && currentBranchScope === 'all') {
       return data;
@@ -656,6 +694,7 @@ export default function App() {
 
   // Branch & privacy filtering: get active archives matching visible individuals and privacy rules
   const effectiveArchives = useMemo(() => {
+    if (isSharedView) return archives;
     let active = archives;
     if (currentBranchScope !== 'all') {
       const allowedIds = new Set(Object.keys(effectiveData.individuals));
@@ -1007,7 +1046,41 @@ export default function App() {
     showToast('Arbre supprimé. Créez un nouvel arbre pour continuer.');
   };
 
+  // Publie (ou republie) l'instantané chiffré d'un lien ; ne réécrit pas si le contenu n'a pas changé
+  const publishShare = async (access: BranchAccess, force = false): Promise<void> => {
+    if (!currentUser || !access.shareKey) return;
+    const snapshot = buildShareSnapshot(data, archives, access);
+    const fingerprint = await snapshotFingerprint(snapshot);
+    const fpKey = `genealogor_share_fp_${access.shareToken}`;
+    try {
+      if (!force && localStorage.getItem(fpKey) === fingerprint) return;
+    } catch (e) {}
+    const shareDoc: ShareDocument = {
+      version: SHARE_FORMAT_VERSION,
+      treeId: roomId,
+      ownerId: currentUser.uid,
+      hasPassword: Boolean(access.wrappedKey),
+      ...(access.wrappedKey ? { wrappedKey: access.wrappedKey } : {}),
+      payload: await sealSnapshot(snapshot, access.shareKey),
+      updatedAt: new Date().toISOString(),
+    };
+    await publishShareToFirestore(access.shareToken, shareDoc, currentUser);
+    try {
+      localStorage.setItem(fpKey, fingerprint);
+    } catch (e) {}
+  };
+
   const handleAddAccessRule = async (newAcc: BranchAccess) => {
+    if (newAcc.shareKey) {
+      try {
+        await publishShare(newAcc, true);
+      } catch (e: any) {
+        console.warn('Publication du lien de partage impossible :', e);
+        throw new Error(
+          'Publication refusée par Firestore. Vérifiez que vous êtes connecté avec Google et que les règles Firestore (collection « shares ») ont été déployées.'
+        );
+      }
+    }
     const next = [newAcc, ...accessList];
     setAccessList(next);
     setVersionedItem(`${STORAGE_KEYS.ACCESS}_${roomId}`, next);
@@ -1015,9 +1088,90 @@ export default function App() {
     try {
       await saveAccessToFirestore(roomId, newAcc, currentUser);
     } catch (e) {}
-    realtimeClient.sendAction('access:update', next);
+    realtimeClient.sendAction('access:update', stripShareSecrets(next));
     showToast(`Lien pour ${newAcc.name} créé.`);
   };
+
+  // Liens de partage : republier les instantanés quand l'arbre ou les archives changent (après 3 s de calme)
+  useEffect(() => {
+    if (isSharedView || userRole !== 'admin' || !currentUser) return;
+    const shares = accessList.filter(isFirestoreShare);
+    if (shares.length === 0) return;
+    const timer = setTimeout(() => {
+      for (const access of shares) {
+        publishShare(access).catch(e => console.warn(`Mise à jour du lien « ${access.name} » impossible :`, e));
+      }
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [data, archives, accessList, currentUser, userRole]);
+
+  // Vue partagée : lecture publique de l'instantané, mises à jour en direct
+  const [sharedView, setSharedView] = useState<SharedViewState>({ status: 'loading' });
+  const sharedKeyRef = React.useRef<string>(SHARE_PARAMS?.key || '');
+
+  const applySharedSnapshot = async (shareDoc: ShareDocument, key: string) => {
+    const snapshot = await openSnapshot(shareDoc.payload, key);
+    const tree = { ...snapshot.tree, sourceHeader: snapshot.title };
+    setData(tree);
+    setArchives(snapshot.archives);
+    setAccessList([]);
+    setUserRole('viewer');
+    setCurrentBranchScope('all');
+    setSelectedPersonId(prev => (prev && tree.individuals[prev]) ? prev : (tree.rootPersonId || Object.keys(tree.individuals)[0] || ''));
+    setSharedView({ status: 'ready', title: snapshot.title, shareName: snapshot.shareName, generatedAt: snapshot.generatedAt });
+  };
+
+  useEffect(() => {
+    if (!SHARE_PARAMS) return;
+    return subscribeToShare(
+      SHARE_PARAMS.token,
+      async (shareDoc) => {
+        if (!shareDoc) {
+          setSharedView({ status: 'missing' });
+          return;
+        }
+        if (!sharedKeyRef.current) {
+          setSharedView(shareDoc.hasPassword && shareDoc.wrappedKey
+            ? { status: 'locked', doc: shareDoc }
+            : { status: 'no-key' });
+          return;
+        }
+        try {
+          await applySharedSnapshot(shareDoc, sharedKeyRef.current);
+        } catch (e) {
+          setSharedView({ status: 'error', message: 'La clé du lien ne permet pas de déchiffrer cet arbre (lien incomplet ou modifié).' });
+        }
+      },
+      () => setSharedView({ status: 'missing' })
+    );
+  }, []);
+
+  const handleUnlockShare = async (password: string): Promise<boolean> => {
+    if (sharedView.status !== 'locked' || !sharedView.doc.wrappedKey) return false;
+    try {
+      const key = await unwrapShareKey(sharedView.doc.wrappedKey, password);
+      await applySharedSnapshot(sharedView.doc, key);
+      sharedKeyRef.current = key;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  // Lien de partage : écrans de chargement, mot de passe ou erreur avant l'affichage de l'arbre
+  if (isSharedView) {
+    if (sharedView.status === 'locked') {
+      return (
+        <PassphraseScreen
+          branchName="Arbre partagé protégé"
+          onUnlock={handleUnlockShare}
+        />
+      );
+    }
+    if (sharedView.status !== 'ready') {
+      return <SharedLinkStatus status={sharedView.status} message={'message' in sharedView ? sharedView.message : undefined} />;
+    }
+  }
 
   // If private link is protected and locked, show passphrase screen
   if (!isUnlocked && pendingBranchAccess) {
@@ -1086,6 +1240,18 @@ export default function App() {
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Bandeau de consultation d'un lien partagé */}
+      {sharedView.status === 'ready' && (
+        <div className="bg-sky-50 dark:bg-sky-950/40 border-b border-sky-200/80 dark:border-sky-900 px-4 md:px-8 py-2 text-xs text-sky-950 dark:text-sky-200 flex flex-wrap items-center justify-between gap-2">
+          <span>
+            <strong>Arbre partagé en consultation</strong> · {sharedView.shareName} · lecture seule
+          </span>
+          <span className="font-mono text-[11px] text-sky-800 dark:text-sky-300">
+            Mis à jour le {new Date(sharedView.generatedAt).toLocaleString('fr-FR')}
+          </span>
         </div>
       )}
 
@@ -1290,14 +1456,26 @@ export default function App() {
         accessList={accessList}
         userRole={userRole}
         onAddAccess={handleAddAccessRule}
+        isCloudReady={!!currentUser}
+        onLogin={handleLogin}
         onDeleteAccess={async (id) => {
+          const removed = accessList.find(a => a.id === id);
           const next = accessList.filter(a => a.id !== id);
           setAccessList(next);
+          setVersionedItem(`${STORAGE_KEYS.ACCESS}_${roomId}`, next);
           setVersionedItem(STORAGE_KEYS.ACCESS, next);
           try {
             await deleteAccessFromFirestore(roomId, id, currentUser);
           } catch (e) {}
-          realtimeClient.sendAction('access:update', next);
+          if (removed?.shareKey) {
+            try {
+              await deleteShareFromFirestore(removed.shareToken, currentUser);
+              localStorage.removeItem(`genealogor_share_fp_${removed.shareToken}`);
+            } catch (e) {
+              console.warn('Suppression de l\'instantané partagé impossible :', e);
+            }
+          }
+          realtimeClient.sendAction('access:update', stripShareSecrets(next));
           showToast('Lien d\'accès révoqué et supprimé.');
         }}
         rootPersonId={data.rootPersonId || Object.keys(data.individuals)[0]}

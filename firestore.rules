@@ -78,7 +78,25 @@ service cloud.firestore {
       allow delete: if isOwner(userId) || isAdmin();
     }
 
-      // Family trees collection
+    // Liens de partage (instantanés chiffrés, lecture seule).
+    // Le jeton (128 bits aléatoires) est l'identifiant du document : lecture directe publique,
+    // énumération réservée au propriétaire (pour supprimer ses liens).
+    match /shares/{token} {
+      allow get: if isValidId(token) && token.size() >= 20;
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(token) && token.size() >= 20
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.payload is string
+        && request.resource.data.payload.size() < 1000000;
+      allow update: if isSignedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.payload is string
+        && request.resource.data.payload.size() < 1000000;
+      allow delete: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+    }
+
+    // Family trees collection
     match /trees/{treeId} {
       allow get: if isSignedIn() && resource != null && canReadTree(resource.data);
       allow list: if isSignedIn() && (

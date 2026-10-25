@@ -149,7 +149,7 @@ function persistRoomStateToDisk(roomId: string, state: RoomState): void {
 
     // P1 : Sécurité des règles : NE JAMAIS stocker de champ password en clair dans la sauvegarde JSON locale
     const sanitizedAccessRules = Array.from(new Set(state.accessRules.values())).map((r: any) => {
-      const { password, ...safeRule } = r;
+      const { password, shareKey, ...safeRule } = r;
       return safeRule;
     });
 

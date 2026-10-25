@@ -3,6 +3,19 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.10.0] — 2026-10-25
+
+### 🔗 Corrigé — Les liens de partage affichaient un arbre vide
+- **Cause** : l'arbre n'existait que dans le navigateur du créateur ; le destinataire, non connecté, n'avait accès ni à Firestore ni au serveur Node (absent sur Cloudflare) qui devait valider le jeton.
+- **Nouveau partage par lien Firestore** (`share-snapshot.ts`) : copie de la branche partagée, anonymisée si demandé, compressée (gzip) et chiffrée (AES-GCM 256), publiée sous `/shares/<jeton>` (jeton de 128 bits).
+  - Lien sans mot de passe : clé dans le fragment `#k=` (jamais transmis aux serveurs). Lien avec mot de passe : clé chiffrée par le mot de passe.
+  - Republication automatique (après 3 s sans modification, uniquement si le contenu a changé), suppression à la révocation du lien et à la suppression de l'arbre.
+  - Destinataire : consultation sans compte, mises à jour en direct, écran de mot de passe, messages clairs pour un lien révoqué ou incomplet ; ses propres arbres ne sont jamais modifiés.
+- Fenêtre **Partager** : connexion Google requise pour créer un lien, liens en lecture seule, anciens liens `inv-` signalés comme inopérants, lien « express » `?room=…&role=viewer` (toujours vide) retiré.
+- Règles Firestore : collection `shares` (lecture par jeton, écriture réservée au créateur). Ajout de `firebase.json` / `.firebaserc` pour les déployer.
+- La clé de partage n'est jamais diffusée par le relais temps réel ni écrite sur le disque du serveur.
+- 11 nouveaux tests (`share-snapshot.test.ts`) — 177 tests au total.
+
 ## [2.9.1] — 2026-10-25
 
 ### ☁️ Préparation au déploiement Cloudflare

@@ -247,10 +247,35 @@ Le routage monopage (retour à `index.html` pour toute URL, ex. `/?room=famille-
 - Toute l'application en **mode local** (arbres, import/export GEDCOM, archives, sauvegardes chiffrées), données dans le navigateur.
 - La **synchronisation Google Cloud Firestore** après connexion Google. Ajoutez le domaine Cloudflare (`*.workers.dev`, `*.pages.dev` ou votre domaine) dans *Firebase Console → Authentication → Settings → Authorized domains*, sinon la connexion Google est refusée.
 
+### Partage d'un arbre par lien (fonctionne sur Cloudflare)
+
+1. Le créateur **se connecte avec Google**, ouvre **Partager** et crée un lien (branche, mot de passe facultatif, masquage des vivants).
+2. Une copie en lecture seule de la branche, **compressée et chiffrée (AES-GCM 256)**, est publiée dans Firestore sous `/shares/<jeton>`. Elle est republiée automatiquement à chaque modification de l'arbre et supprimée quand le lien est révoqué ou l'arbre supprimé.
+3. Le destinataire ouvre le lien sans compte :
+   - **sans mot de passe** : `https://…/?share=<jeton>#k=<clé>` — la clé est dans le fragment `#`, jamais envoyé à un serveur ;
+   - **avec mot de passe** : `https://…/?share=<jeton>` — la clé est déchiffrée avec le mot de passe saisi.
+
+Les images des archives ne sont pas incluses dans la copie partagée (limite de 1 Mo par document Firestore ; un arbre de ~500 personnes occupe environ 60 Ko).
+
+#### Déployer les règles Firestore (obligatoire une fois)
+
+Les règles de `firestore.rules` autorisent la lecture d'un partage par son jeton et réservent l'écriture à son créateur.
+
+- **Console** : Firebase Console → projet `geometric-gift-7f6jr` → Firestore Database → base `ai-studio-genealogorarbref-…` → onglet **Règles** → coller le contenu de `firestore.rules` → **Publier**.
+- **Ligne de commande** (`firebase.json` et `.firebaserc` sont fournis) :
+
+```bash
+npx firebase-tools login
+```
+
+```bash
+npx firebase-tools deploy --only firestore:rules
+```
+
 ### Ce qui nécessite le serveur Node (`npm start`) sur un autre hébergeur
 
 - Le **relais temps réel WebSocket** (présence des membres, modifications en direct).
-- Les **liens de partage par branche** vérifiés côté serveur (`/api/auth/room-token`) et la purge serveur à la suppression d'un arbre.
+- Les anciens liens `?room=…&token=inv-…`, vérifiés côté serveur (`/api/auth/room-token`), et la purge serveur à la suppression d'un arbre.
 
 Sans serveur, l'application le détecte (les appels `/api/*` ne renvoient pas de JSON) et passe en mode local + Firestore, sans tentatives de reconnexion en boucle. Pour utiliser un relais hébergé ailleurs, définissez `VITE_WS_URL` (ex. `wss://relais.example.com/ws`) dans les variables de build.
 
