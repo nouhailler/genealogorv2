@@ -3,6 +3,14 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.14.0] — 2026-10-25
+
+### 🕰️ Ajouté — Chronologie depuis une fiche (ascendants / descendants)
+- L'écran Chronologie part de la fiche sélectionnée, avec trois modes : **Ascendants** (la personne et ses ancêtres), **Descendants** (la personne et sa postérité) et **Tout l'arbre**.
+- Fiche individuelle : boutons « Chronologie ↑ Ascendants / ↓ Descendants » pour ouvrir directement la chronologie de la personne.
+- Chaque événement indique le lien de parenté avec la personne (Père, Grand-mère, Arrière-petit-fils, Ancêtre · 5e génération…) ; le contexte historique est limité à la période couverte par la lignée.
+- Module `timeline-scope.ts` et 4 nouveaux tests — 193 tests au total.
+
 ## [2.13.0] — 2026-10-25
 
 ### 📱 Amélioré — Arbre adapté à l'écran et liens familiaux visibles

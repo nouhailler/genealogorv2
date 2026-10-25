@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
-import { Clock, Calendar, MapPin, User, ChevronRight, Landmark } from 'lucide-react';
+import { Clock, Calendar, MapPin, User, ChevronRight, Landmark, ArrowUp, ArrowDown, GitFork } from 'lucide-react';
 import { GenealogyData, LifeEvent } from '../../types/genealogy';
+import { TimelineScope, getLineageDepths, relationLabel } from '../../lib/timeline-scope';
 
 interface TimelineViewProps {
   data: GenealogyData;
   onSelectPerson: (id: string) => void;
+  /** Fiche de départ (personne sélectionnée) */
+  personId?: string;
+  scope: TimelineScope;
+  onScopeChange: (scope: TimelineScope) => void;
 }
 
 interface TimelineEvent {
@@ -15,6 +20,8 @@ interface TimelineEvent {
   personName: string;
   place?: string;
   description: string;
+  /** Lien de parenté avec la personne de départ */
+  relation?: string;
 }
 
 const HISTORICAL_CONTEXT: Array<{ year: number; title: string; desc: string }> = [
@@ -30,13 +37,24 @@ const HISTORICAL_CONTEXT: Array<{ year: number; title: string; desc: string }> =
   { year: 1918, title: 'Armistice du 11 Novembre', desc: 'Victoire des Alliés et fin des combats de la Grande Guerre.' },
 ];
 
-export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson }) => {
+export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson, personId, scope, onScopeChange }) => {
   const [filterType, setFilterType] = useState<string>('all');
 
   const timelineEvents: TimelineEvent[] = [];
 
+  // Périmètre : la fiche de départ et ses ascendants ou descendants, ou tout l'arbre
+  const person = personId ? data.individuals[personId] : undefined;
+  const effectiveScope: TimelineScope = person ? scope : 'all';
+  const depths = person && effectiveScope !== 'all' ? getLineageDepths(data, person.id, effectiveScope) : null;
+  const inScope = (id?: string) => !depths || (!!id && depths.has(id));
+  const relationOf = (id: string) => {
+    const depth = depths?.get(id);
+    return depth === undefined ? undefined : relationLabel(depth, data.individuals[id].sex);
+  };
+
   // Extract events from individuals
   for (const ind of Object.values(data.individuals)) {
+    if (!inScope(ind.id)) continue;
     if (ind.birth?.parsedDate?.year) {
       timelineEvents.push({
         year: ind.birth.parsedDate.year,
@@ -46,6 +64,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
         personName: ind.name,
         place: ind.birth.place,
         description: `Naissance de ${ind.name}`,
+        relation: relationOf(ind.id),
       });
     }
 
@@ -58,12 +77,14 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
         personName: ind.name,
         place: ind.death.place,
         description: `Décès de ${ind.name}`,
+        relation: relationOf(ind.id),
       });
     }
   }
 
   // Extract events from marriages
   for (const fam of Object.values(data.families)) {
+    if (!inScope(fam.husbandId) && !inScope(fam.wifeId)) continue;
     if (fam.marriage?.parsedDate?.year) {
       const husb = fam.husbandId ? data.individuals[fam.husbandId] : undefined;
       const wife = fam.wifeId ? data.individuals[fam.wifeId] : undefined;
@@ -80,8 +101,12 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
     }
   }
 
-  // Add historical context
+  // Add historical context (limité à la période couverte par la lignée affichée)
+  const familyYears = timelineEvents.map(e => e.year);
+  const minYear = Math.min(...familyYears) - 10;
+  const maxYear = Math.max(...familyYears) + 10;
   for (const hist of HISTORICAL_CONTEXT) {
+    if (depths && (familyYears.length === 0 || hist.year < minYear || hist.year > maxYear)) continue;
     timelineEvents.push({
       year: hist.year,
       dateStr: `${hist.year}`,
@@ -110,12 +135,39 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
             LIGNE DU TEMPS & CONTEXTE HISTORIQUE
           </span>
           <h1 className="font-serif text-3xl font-bold text-stone-900 mt-1">
-            Chronologie Familiale
+            {person && effectiveScope !== 'all' ? `Chronologie de ${person.name}` : 'Chronologie Familiale'}
           </h1>
           <p className="text-xs text-stone-600 mt-0.5">
-            Retracez les naissances, mariages et disparitions en regard des grands événements de l'Histoire de France.
+            {effectiveScope === 'ascendants'
+              ? `${person?.name} et ses ascendants (${(depths?.size || 1) - 1}), en regard des grands événements de l'Histoire de France.`
+              : effectiveScope === 'descendants'
+                ? `${person?.name} et ses descendants (${(depths?.size || 1) - 1}), en regard des grands événements de l'Histoire de France.`
+                : 'Retracez les naissances, mariages et disparitions en regard des grands événements de l\'Histoire de France.'}
           </p>
         </div>
+
+        <div className="flex flex-col items-start sm:items-end gap-2">
+        {/* Périmètre : depuis la fiche (ascendants / descendants) ou tout l'arbre */}
+        {person && (
+          <div className="flex items-center p-1 bg-white border border-stone-200 rounded-lg text-xs font-medium text-stone-600 shadow-2xs self-start" role="group" aria-label="Périmètre de la chronologie">
+            {([
+              ['ascendants', 'Ascendants', ArrowUp],
+              ['descendants', 'Descendants', ArrowDown],
+              ['all', "Tout l'arbre", GitFork],
+            ] as const).map(([value, label, Icon]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => onScopeChange(value)}
+                aria-pressed={effectiveScope === value}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors cursor-pointer ${effectiveScope === value ? 'bg-amber-900 text-white font-bold' : 'hover:text-stone-900'}`}
+              >
+                <Icon className="w-3 h-3" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Filter buttons */}
         <div className="flex items-center p-1 bg-white border border-stone-200 rounded-lg text-xs font-medium text-stone-600 shadow-2xs self-start">
@@ -137,6 +189,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
           >
             Histoire
           </button>
+        </div>
         </div>
       </div>
 
@@ -197,6 +250,12 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ data, onSelectPerson
                 <h3 className="font-serif text-sm font-bold text-stone-900 mt-1">
                   {event.description}
                 </h3>
+
+                {event.relation && (
+                  <span className="inline-block mt-1 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">
+                    {event.relation}
+                  </span>
+                )}
 
                 {event.place && (
                   <p className="text-xs text-stone-500 flex items-center gap-1 mt-1">

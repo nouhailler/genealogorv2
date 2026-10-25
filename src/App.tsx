@@ -19,6 +19,7 @@ import { TreeManagerModal } from './components/TreeManagerModal';
 import { FirstTimeTreeWizard } from './components/FirstTimeTreeWizard';
 import { SharedLinkStatus } from './components/SharedLinkStatus';
 import { ChangeAlertBanner } from './components/ChangeAlertBanner';
+import type { TimelineScope } from './lib/timeline-scope';
 import {
   ChangeEvent,
   TreeState,
@@ -154,6 +155,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('tree');
   const [selectedPersonId, setSelectedPersonId] = useState<string>(() => data.rootPersonId || Object.keys(data.individuals)[0] || '');
   const [selectedArchiveId, setSelectedArchiveId] = useState<string>('');
+  // Chronologie : par défaut depuis la fiche sélectionnée, vers ses ascendants
+  const [timelineScope, setTimelineScope] = useState<TimelineScope>('ascendants');
 
   // Firebase Auth & Cloud Sync state
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
@@ -1415,6 +1418,10 @@ export default function App() {
             onSelectPerson={setSelectedPersonId}
             onEditPerson={userRole === 'admin' ? (p) => setEditingPerson(p) : undefined}
             onOpenArchives={() => setActiveTab('archives')}
+            onOpenTimeline={(scope) => {
+              setTimelineScope(scope);
+              setActiveTab('timeline');
+            }}
             onSelectArchive={(docId) => {
               setSelectedArchiveId(docId);
               setActiveTab('archives');
@@ -1515,6 +1522,9 @@ export default function App() {
         {activeTab === 'timeline' && (
           <TimelineView
             data={effectiveData}
+            personId={selectedPersonId}
+            scope={timelineScope}
+            onScopeChange={setTimelineScope}
             onSelectPerson={(id) => {
               setSelectedPersonId(id);
               setActiveTab('profile');
