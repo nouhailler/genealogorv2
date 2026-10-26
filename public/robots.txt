@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://genealogor.swinux.ch/sitemap.xml

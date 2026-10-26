@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Genealogor — Construire et explorer son arbre généalogique</title>
+  <meta name="description" content="Genealogor est une application web de généalogie en français : importez votre arbre au format GEDCOM, puis explorez arbre, fiches, chronologie et carte des lieux. Sans compte, les données restent dans votre navigateur." />
+  <link rel="canonical" href="https://genealogor.swinux.ch/decouvrir/" />
+  <meta name="theme-color" content="#2D1B0A" />
+  <meta name="color-scheme" content="light" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="fr_FR" />
+  <meta property="og:site_name" content="Genealogor" />
+  <meta property="og:title" content="Genealogor — Construire et explorer son arbre généalogique" />
+  <meta property="og:description" content="Importez votre arbre GEDCOM, puis explorez arbre, fiches, chronologie et carte des lieux de votre famille." />
+  <meta property="og:url" content="https://genealogor.swinux.ch/decouvrir/" />
+  <meta property="og:image" content="https://genealogor.swinux.ch/decouvrir/images/og-genealogor.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Vue arbre de Genealogor avec une famille fictive" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="apple-touch-icon" href="/logo.svg" />
+
+  <!-- Mêmes polices que l'application (Google Fonts) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="landing.css" />
+  <link rel="preload" as="image" href="images/apercu-arbre.webp" type="image/webp" />
+  <script src="landing.js" defer></script>
+</head>
+<body>
+  <!-- Icônes : tracés Lucide (licence ISC), la bibliothèque déjà utilisée par l'application -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-tree" viewBox="0 0 24 24"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></symbol>
+      <symbol id="i-file-up" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 12v6"/><path d="m15 15-3-3-3 3"/></symbol>
+      <symbol id="i-user-plus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
+      <symbol id="i-branch" viewBox="0 0 24 24"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+      <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></symbol>
+      <symbol id="i-images" viewBox="0 0 24 24"><path d="m22 11-1.296-1.296a2.4 2.4 0 0 0-3.408 0L11 16"/><path d="M4 8a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2"/><circle cx="13" cy="7" r="1" fill="currentColor"/><rect x="8" y="2" width="14" height="14" rx="2"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></symbol>
+      <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></symbol>
+      <symbol id="i-archive" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+      <symbol id="i-drive" viewBox="0 0 24 24"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></symbol>
+      <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    </defs>
+  </svg>
+
+  <a class="skip-link" href="#contenu">Aller au contenu</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#haut" aria-label="Genealogor, haut de page">
+        <img src="/logo.svg" alt="" width="36" height="36" />
+        <span>Genealogor</span>
+      </a>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="menu-principal">
+        <svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg>
+        <span class="visually-hidden">Ouvrir le menu</span>
+      </button>
+      <nav id="menu-principal" class="site-nav" aria-label="Navigation principale">
+        <ul>
+          <li><a href="#fonctionnalites">Fonctionnalités</a></li>
+          <li><a href="#apercu">Aperçu</a></li>
+          <li><a href="#donnees">Vos données</a></li>
+          <li><a href="#installer">Installer</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+        <a class="btn btn-primary btn-small" href="https://genealogor.swinux.ch/">Ouvrir l'application</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="contenu">
+    <!-- B. Accueil -->
+    <section class="hero" id="haut" aria-labelledby="titre-hero">
+      <div class="container hero-grid">
+        <div class="hero-text">
+          <p class="eyebrow">Application de généalogie en français</p>
+          <h1 id="titre-hero">L'histoire de votre famille, rassemblée et transmise.</h1>
+          <p class="lead">
+            Importez votre arbre au format GEDCOM et Genealogor le rend vivant :
+            une fiche pour chacun, les liens entre générations, une chronologie et la carte des lieux de vie.
+            Complétez et corrigez ensuite les fiches au fil de vos recherches.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="https://genealogor.swinux.ch/">
+              Ouvrir Genealogor
+              <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+            </a>
+            <a class="btn btn-ghost" href="#fonctionnalites">Voir les fonctionnalités</a>
+          </div>
+          <ul class="hero-facts">
+            <li><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>Aucun compte nécessaire pour commencer</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-drive"/></svg>Données conservées dans votre navigateur</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-file-up"/></svg>Import et export GEDCOM</li>
+          </ul>
+        </div>
+        <figure class="hero-visual">
+          <div class="frame frame-desktop">
+            <div class="frame-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+            <img src="images/apercu-arbre.webp" width="1200" height="692" fetchpriority="high"
+                 alt="Vue Arbre de Genealogor : Lucien Vallier au centre, ses parents, sa fratrie, son conjoint et ses enfants, puis l'arbre de ses ascendants." />
+          </div>
+          <div class="frame frame-phone" aria-hidden="true">
+            <img src="images/mobile-arbre.webp" width="480" height="960" alt="" loading="lazy" />
+          </div>
+          <figcaption>Capture réelle de l'application, avec une famille <strong>entièrement fictive</strong>.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- C. Présentation -->
+    <section class="section" id="presentation" aria-labelledby="titre-presentation">
+      <div class="container split">
+        <div>
+          <p class="eyebrow">Qu'est-ce que Genealogor ?</p>
+          <h2 id="titre-presentation">Un atelier numérique pour vos recherches familiales</h2>
+          <p>
+            Actes recopiés dans un carnet, photos sans légende, dates notées au dos d'une enveloppe :
+            la mémoire d'une famille est souvent dispersée. Genealogor réunit ces informations
+            autour de chaque personne et montre comment elles se relient, d'une génération à l'autre.
+          </p>
+          <p>
+            Il s'ouvre dans un navigateur, sur ordinateur, tablette ou téléphone, sans installation obligatoire.
+          </p>
+        </div>
+        <figure class="generations" aria-labelledby="legende-generations">
+          <svg viewBox="0 0 380 220" role="img" aria-labelledby="legende-generations">
+            <g transform="translate(60 0)">
+            <g class="gen-links">
+              <path d="M80 50 C80 85 120 85 120 115"/><path d="M160 50 C160 85 120 85 120 115"/>
+              <path d="M200 50 C200 85 220 85 220 115"/><path d="M260 50 C260 85 220 85 220 115"/>
+              <path d="M120 135 C120 165 170 160 170 185"/><path d="M220 135 C220 165 170 160 170 185"/>
+            </g>
+            <g class="gen-nodes">
+              <circle cx="80" cy="40" r="11" class="n-blue"/><circle cx="160" cy="40" r="11" class="n-rose"/>
+              <circle cx="200" cy="40" r="11" class="n-blue"/><circle cx="260" cy="40" r="11" class="n-rose"/>
+              <circle cx="120" cy="125" r="13" class="n-blue"/><circle cx="220" cy="125" r="13" class="n-rose"/>
+              <circle cx="170" cy="195" r="15" class="n-root"/>
+            </g>
+            </g>
+            <g class="gen-labels">
+              <text x="16" y="44">Grands-parents</text>
+              <text x="16" y="129">Parents</text>
+              <text x="16" y="199">Vous</text>
+            </g>
+          </svg>
+          <figcaption id="legende-generations">Trois générations reliées : la numérotation Sosa part de vous (1), puis vos parents (2 et 3), vos grands-parents (4 à 7).</figcaption>
+        </figure>
+      </div>
+
+      <div class="container">
+        <h3 class="subhead">À qui s'adresse-t-il ?</h3>
+        <ul class="profiles">
+          <li class="profile-card">
+            <h4>Vous découvrez la généalogie</h4>
+            <p>Un assistant vous guide à la première ouverture et chaque écran affiche un court guide repliable. Les infobulles expliquent les notions comme la numérotation Sosa.</p>
+          </li>
+          <li class="profile-card">
+            <h4>Vous avez déjà un arbre ailleurs</h4>
+            <p>Exportez-le au format GEDCOM (.ged), le format d'échange de la plupart des logiciels et sites de généalogie, puis importez-le dans Genealogor pour l'explorer autrement.</p>
+          </li>
+          <li class="profile-card">
+            <h4>Vous voulez transmettre</h4>
+            <p>Chronologie, carte et fiches rendent l'histoire lisible pour les proches. Une branche peut être partagée en lecture par un lien privé.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- D. Fonctionnalités -->
+    <section class="section section-alt" id="fonctionnalites" aria-labelledby="titre-fonctionnalites">
+      <div class="container">
+        <p class="eyebrow">Fonctionnalités</p>
+        <h2 id="titre-fonctionnalites">Ce que vous pouvez faire avec Genealogor</h2>
+        <p class="section-intro">Uniquement des fonctions présentes dans l'application aujourd'hui.</p>
+
+        <ul class="features">
+          <li class="feature">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-file-up"/></svg></span>
+            <h3>Importer un arbre GEDCOM</h3>
+            <p>Créez un arbre, puis importez votre fichier .ged : Genealogor indique combien de personnes et de familles il a reconnues avant de l'ouvrir.</p>
+          </li>
+          <li class="feature">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-user-plus"/></svg></span>
+            <h3>Compléter et corriger les fiches</h3>
+            <p>Noms, dates et lieux de naissance et de décès, métiers, notes et sources. Les liens de parenté (parents, unions, enfants) proviennent pour l'instant du fichier GEDCOM importé.</p>
+          </li>
+          <li class="feature">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-tree"/></svg></span>
+            <h3>Naviguer dans l'arbre</h3>
+            <p>Ascendance numérotée selon Sosa sur 3 à 5 générations, ou descendance numérotée d'Aboville. N'importe quelle personne peut devenir le point de départ de l'arbre.</p>
+          </li>
+          <li class="feature">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg></span>
+            <h3>Une fiche par personne</h3>
+            <p>Événements de vie, parents, frères et sœurs, conjoints, enfants, documents liés : tout ce qui concerne une personne au même endroit.</p>
+          </li>
+          <li class="feature">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-branch"/></svg></span>
+            <h3>Voir les liens autrement</h3>
+            <p>Éventail des ancêtres et graphe des relations pour repérer d'un coup d'œil qui est lié à qui.</p>
+          </li>
+          <li class="feature">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-history"/></svg></span>
+            <h3>Chronologie et repères historiques</h3>
+            <p>Les événements d'une vie et de ses ascendants, génération par génération, mis en regard de grands événements de l'histoire de France.</p>
+          </li>
+          <li class="feature">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg></span>
+            <h3>Carte des lieux de la famille</h3>
+            <p>Les communes de naissance, de mariage et de décès placées sur une carte, avec la liste des personnes liées à chaque lieu.</p>
+          </li>
+          <li class="feature">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-images"/></svg></span>
+            <h3>Actes et photographies</h3>
+            <p>Ajoutez des scans d'actes ou des photos, avec cote, date et transcription, rattachez-les aux fiches et repérez les personnes sur une photo de groupe.</p>
+          </li>
+          <li class="feature">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-chart"/></svg></span>
+            <h3>Statistiques et contrôle de cohérence</h3>
+            <p>Patronymes fréquents, âge moyen au décès, et signalement des incohérences (décès avant la naissance, parent trop jeune…). Détection et fusion des doublons.</p>
+          </li>
+          <li class="feature">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
+            <h3>Recherche et plusieurs arbres</h3>
+            <p>Retrouvez une personne par son nom ou son lieu. Gérez plusieurs arbres séparés, par exemple côté paternel et côté maternel.</p>
+          </li>
+          <li class="feature">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg></span>
+            <h3>Export et sauvegarde</h3>
+            <p>Exportez l'arbre en GEDCOM pour le réutiliser ailleurs, ou créez une sauvegarde complète protégée par une phrase secrète, à restaurer plus tard.</p>
+          </li>
+          <li class="feature">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-share"/></svg></span>
+            <h3>Partager une branche</h3>
+            <p>Créez un lien de consultation pour une branche, avec mot de passe facultatif et masquage des personnes vivantes. Nécessite une connexion Google.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- E. Aperçu -->
+    <section class="section" id="apercu" aria-labelledby="titre-apercu">
+      <div class="container">
+        <p class="eyebrow">Aperçu</p>
+        <h2 id="titre-apercu">Genealogor en images</h2>
+        <p class="section-intro">
+          Captures réelles de l'application. La famille Vallier est <strong>inventée</strong> pour la démonstration :
+          ni ces noms ni ces dates ne désignent des personnes réelles.
+        </p>
+
+        <div class="gallery">
+          <figure class="shot">
+            <div class="frame"><img src="images/apercu-fiche.webp" width="1200" height="692" loading="lazy" alt="Fiche de Lucien Vallier : métier, dates, boutons vers l'arbre, la chronologie, les ascendants et descendants, et sa fratrie présentée de l'aîné au benjamin." /></div>
+            <figcaption><strong>La fiche individuelle.</strong> Dates, métier, fratrie dans l'ordre des naissances et accès direct à l'arbre ou à la chronologie de la personne.</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="frame"><img src="images/apercu-chronologie.webp" width="1200" height="692" loading="lazy" alt="Chronologie de Lucien Vallier : sa naissance en 1898, la mobilisation de 1914, la fin de la Grande Guerre en 1918, puis son mariage en 1922." /></div>
+            <figcaption><strong>La chronologie.</strong> La vie d'une personne et de ses ancêtres, entrecoupée de repères historiques.</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="frame"><img src="images/apercu-carte.webp" width="1200" height="692" loading="lazy" alt="Carte des lieux de la famille : neuf communes de l'ouest de la France, Angers étant la plus représentée avec douze événements." /></div>
+            <figcaption><strong>La carte.</strong> Où la famille est née, s'est mariée et est décédée ; touchez une commune pour voir qui y a vécu.</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="frame"><img src="images/apercu-graphe.webp" width="1200" height="692" loading="lazy" alt="Graphe des relations centré sur Lucien Vallier, reliant ses parents, grands-parents, frère, sœur, épouse et enfants." /></div>
+            <figcaption><strong>Le graphe des relations.</strong> Filiations et unions autour d'une personne, jusqu'à plusieurs degrés.</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="frame"><img src="images/apercu-statistiques.webp" width="1200" height="692" loading="lazy" alt="Statistiques de l'arbre : 12 individus, 4 unions, âge moyen au décès de 68 ans, patronymes et prénoms fréquents, mois de naissance." /></div>
+            <figcaption><strong>Les statistiques.</strong> Patronymes, prénoms, longévité, et contrôle de cohérence des dates.</figcaption>
+          </figure>
+        </div>
+
+        <div class="mobile-shots">
+          <div class="mobile-text">
+            <h3>Aussi sur téléphone</h3>
+            <p>L'interface s'adapte aux petits écrans : l'arbre, les fiches et la carte restent utilisables au doigt, pour consulter l'arbre en famille ou noter une information sur place.</p>
+          </div>
+          <figure class="frame-phone-figure">
+            <div class="frame frame-phone-static"><img src="images/mobile-arbre.webp" width="480" height="960" loading="lazy" alt="Vue Arbre sur téléphone : la personne centrale et ses parents, sa fratrie, son conjoint et ses enfants." /></div>
+            <figcaption>L'arbre</figcaption>
+          </figure>
+          <figure class="frame-phone-figure">
+            <div class="frame frame-phone-static"><img src="images/mobile-fiche.webp" width="480" height="960" loading="lazy" alt="Fiche individuelle sur téléphone avec ses boutons d'action et la fratrie." /></div>
+            <figcaption>La fiche</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- F. Bénéfices -->
+    <section class="section section-alt" id="benefices" aria-labelledby="titre-benefices">
+      <div class="container">
+        <p class="eyebrow">Ce que vous y gagnez</p>
+        <h2 id="titre-benefices">Moins de papiers épars, plus d'histoire partagée</h2>
+        <ul class="benefits">
+          <li>
+            <h3>Retrouver une information en quelques secondes</h3>
+            <p>La recherche par nom ou par lieu mène directement à la fiche, où dates, lieux, notes et documents sont réunis.</p>
+          </li>
+          <li>
+            <h3>Comprendre les liens de parenté</h3>
+            <p>Arbre, éventail et graphe montrent la place de chacun ; la numérotation Sosa situe chaque ancêtre par rapport à vous.</p>
+          </li>
+          <li>
+            <h3>Organiser vos recherches</h3>
+            <p>Le contrôle de cohérence signale les dates impossibles et les doublons probables, pour savoir où reprendre vos vérifications.</p>
+          </li>
+          <li>
+            <h3>Transmettre l'histoire familiale</h3>
+            <p>Une chronologie lisible, une carte des lieux et un lien de consultation pour faire découvrir l'arbre à vos proches.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- G. Données personnelles -->
+    <section class="section" id="donnees" aria-labelledby="titre-donnees">
+      <div class="container">
+        <p class="eyebrow">Données personnelles et confiance</p>
+        <h2 id="titre-donnees">Où vont les informations de votre famille ?</h2>
+        <p class="section-intro">
+          La généalogie touche aussi des personnes vivantes. Voici, sans enjoliver, comment Genealogor traite vos données.
+        </p>
+
+        <div class="trust-grid">
+          <article class="trust-card">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-drive"/></svg></span>
+            <h3>Par défaut : dans votre navigateur</h3>
+            <p>Sans connexion, vos arbres, fiches et documents sont enregistrés dans le stockage local du navigateur de l'appareil utilisé. Ils ne sont pas envoyés à un serveur.</p>
+            <p class="note">Ce stockage n'est pas chiffré et sa taille est limitée (photos et scans le remplissent vite). Si vous effacez les données du site dans votre navigateur, l'arbre disparaît : faites des sauvegardes.</p>
+          </article>
+          <article class="trust-card">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-cloud"/></svg></span>
+            <h3>Si vous vous connectez avec Google</h3>
+            <p>La connexion est facultative. Une fois connecté, vos arbres sont aussi enregistrés dans Google Firebase (Cloud Firestore) pour être retrouvés sur un autre appareil. Les règles d'accès limitent la lecture d'un arbre à son créateur, aux personnes qu'il autorise et aux administrateurs du service.</p>
+          </article>
+          <article class="trust-card">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg></span>
+            <h3>Si vous partagez une branche</h3>
+            <p>Une copie de la branche, chiffrée (AES-GCM 256 bits), est publiée sur Firebase. La clé se trouve dans le lien ou est dérivée du mot de passe que vous choisissez. Vous pouvez masquer les personnes vivantes ; les images ne sont pas partagées. Révoquer le lien supprime la copie.</p>
+          </article>
+          <article class="trust-card">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg></span>
+            <h3>Services externes utilisés</h3>
+            <ul>
+              <li><strong>Carte :</strong> les noms de lieux (jamais les noms de personnes) sont envoyés aux services publics de géocodage <span lang="en">api-adresse.data.gouv.fr</span> et <span lang="en">geo.api.gouv.fr</span>, puis à OpenStreetMap Nominatim si besoin ; les fonds de carte viennent d'Esri et d'OpenStreetMap.</li>
+              <li><strong>Polices et connexion :</strong> l'application charge des polices Google Fonts et le kit Firebase de Google.</li>
+              <li>Aucun outil de mesure d'audience n'est intégré, ni dans l'application ni sur cette page.</li>
+            </ul>
+          </article>
+          <article class="trust-card">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></span>
+            <h3>Sauvegarder, exporter, supprimer</h3>
+            <ul>
+              <li>Export GEDCOM de l'arbre, avec option pour anonymiser les personnes vivantes.</li>
+              <li>Sauvegarde complète chiffrée par une phrase secrète, et restauration précédée d'une copie de sécurité.</li>
+              <li>Suppression d'un arbre depuis le gestionnaire d'arbres : données locales et, si vous êtes connecté, copie Firebase.</li>
+            </ul>
+          </article>
+          <article class="trust-card trust-card-muted">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-archive"/></svg></span>
+            <h3>Votre responsabilité</h3>
+            <p>Avant la première utilisation, l'application présente des mentions légales : chacun reste responsable des informations qu'il saisit, notamment au regard du RGPD pour les personnes vivantes. Il n'existe pas encore de politique de confidentialité publiée séparément.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- H. Installation -->
+    <section class="section section-alt" id="installer" aria-labelledby="titre-installer">
+      <div class="container">
+        <p class="eyebrow">Installation et prise en main</p>
+        <h2 id="titre-installer">Ouvrir, puis installer si vous le souhaitez</h2>
+        <p class="section-intro">
+          Genealogor fonctionne directement dans le navigateur. Il peut aussi être installé comme une application
+          (PWA) pour s'ouvrir dans sa propre fenêtre, depuis l'écran d'accueil ou le bureau.
+        </p>
+        <div class="steps-grid">
+          <ol class="steps">
+            <li><strong>Ouvrez</strong> <a href="https://genealogor.swinux.ch/">genealogor.swinux.ch</a> et lisez les mentions d'accueil.</li>
+            <li><strong>Nommez votre arbre</strong>, par exemple « Famille Martin ».</li>
+            <li><strong>Importez votre fichier .ged</strong>, exporté depuis votre logiciel ou site de généalogie. Les liens familiaux viennent de ce fichier.</li>
+            <li><strong>Explorez</strong> : arbre, fiches, chronologie, carte… et pensez à exporter une sauvegarde de temps en temps.</li>
+          </ol>
+          <div class="install-cards">
+            <article class="install-card">
+              <h3><svg class="icon" aria-hidden="true"><use href="#i-phone"/></svg>Android (Chrome, Edge)</h3>
+              <p>Touchez le bouton <strong>Installer</strong> de l'application, ou le menu ⋮ du navigateur puis « Installer l'application » / « Ajouter à l'écran d'accueil ».</p>
+            </article>
+            <article class="install-card">
+              <h3><svg class="icon" aria-hidden="true"><use href="#i-phone"/></svg>iPhone et iPad (Safari)</h3>
+              <p>Touchez le bouton Partager, puis « Sur l'écran d'accueil ».</p>
+            </article>
+            <article class="install-card">
+              <h3><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg>Ordinateur (Chrome, Edge)</h3>
+              <p>Cliquez sur <strong>Installer</strong> dans la barre de l'application, ou sur l'icône d'installation dans la barre d'adresse.</p>
+            </article>
+            <p class="note">
+              <strong>Hors connexion :</strong> l'application ne propose pas aujourd'hui de mode hors ligne ;
+              une connexion Internet est nécessaire pour l'ouvrir, même installée. Vos données, elles, restent dans le navigateur.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- I. FAQ -->
+    <section class="section" id="faq" aria-labelledby="titre-faq">
+      <div class="container container-narrow">
+        <p class="eyebrow">Questions fréquentes</p>
+        <h2 id="titre-faq">Vos questions</h2>
+        <div class="faq">
+          <details>
+            <summary>Qu'est-ce que Genealogor ?</summary>
+            <p>Une application web de généalogie en français pour construire un arbre familial, rassembler les informations sur chaque personne et les explorer sous forme d'arbre, de fiches, de chronologie, de carte et de statistiques.</p>
+          </details>
+          <details>
+            <summary>Comment créer ou consulter un arbre familial ?</summary>
+            <p>À la première ouverture, un assistant vous demande un nom d'arbre, puis propose d'importer un fichier GEDCOM. Ensuite, l'onglet « Arbre » affiche la personne choisie et ses ascendants ou descendants.</p>
+          </details>
+          <details>
+            <summary>Peut-on ajouter plusieurs générations ?</summary>
+            <p>Un arbre importé conserve toutes ses générations ; l'arbre en affiche 3 à 5 à la fois, l'éventail jusqu'à 7. En revanche, l'application ne permet pas encore de relier à la main une nouvelle personne à ses parents, à son conjoint ou à ses enfants : les liens familiaux viennent du fichier GEDCOM.</p>
+          </details>
+          <details>
+            <summary>Faut-il créer un compte ?</summary>
+            <p>Non. Tout fonctionne sans compte, avec des données gardées dans votre navigateur. La connexion Google sert uniquement à enregistrer vos arbres dans Firebase et à créer des liens de partage. Les personnes qui reçoivent un lien n'ont pas besoin de compte.</p>
+          </details>
+          <details>
+            <summary>Où sont enregistrées les données ?</summary>
+            <p>Dans le stockage local du navigateur de votre appareil. Si vous vous connectez avec Google, une copie est aussi enregistrée dans Google Firebase. Les détails sont dans la section <a href="#donnees">Vos données</a>.</p>
+          </details>
+          <details>
+            <summary>Peut-on importer ou exporter un arbre généalogique ?</summary>
+            <p>Oui, au format GEDCOM (.ged), reconnu par la plupart des logiciels et sites de généalogie. Une sauvegarde complète chiffrée, propre à Genealogor, est aussi proposée.</p>
+          </details>
+          <details>
+            <summary>Peut-on utiliser l'application sur un téléphone ?</summary>
+            <p>Oui, l'interface est adaptée aux téléphones et tablettes, et l'application peut être ajoutée à l'écran d'accueil.</p>
+          </details>
+          <details>
+            <summary>L'application fonctionne-t-elle sans connexion Internet ?</summary>
+            <p>Pas à ce jour : il faut une connexion pour ouvrir l'application. Les données saisies ne dépendent pas d'un serveur, mais l'application elle-même n'est pas encore conservée pour un usage hors ligne. La carte demande aussi une connexion.</p>
+          </details>
+          <details>
+            <summary>L'application est-elle gratuite ?</summary>
+            <p>L'accès est libre : l'application ne demande ni inscription ni paiement. Son code source est consultable sur GitHub.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- J. Appel à l'action -->
+    <section class="final-cta" aria-labelledby="titre-final">
+      <div class="container">
+        <h2 id="titre-final">Redécouvrez votre arbre, génération après génération.</h2>
+        <p>Importez votre fichier GEDCOM et parcourez l'histoire de votre famille : ses visages, ses dates, ses lieux.</p>
+        <a class="btn btn-light" href="https://genealogor.swinux.ch/">
+          Ouvrir Genealogor
+          <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <!-- K. Pied de page -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="brand brand-footer">
+        <img src="/logo.svg" alt="" width="32" height="32" />
+        <span>Genealogor</span>
+      </div>
+      <nav aria-label="Liens du pied de page">
+        <ul>
+          <li><a href="https://genealogor.swinux.ch/">Application</a></li>
+          <li><a href="https://github.com/nouhailler/genealogorv2">Code source sur GitHub</a></li>
+          <li><a href="https://github.com/nouhailler/genealogorv2#readme">Documentation</a></li>
+        </ul>
+      </nav>
+      <p class="footer-note">Les captures d'écran présentent une famille fictive. Icônes : Lucide (licence ISC).</p>
+    </div>
+  </footer>
+</body>
+</html>

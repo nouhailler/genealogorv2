@@ -13,3 +13,6 @@ data/rooms/*.json
 .aistudio/
 public/assets/aistudio/
 .claude/
+
+# Cache local de « wrangler dev »
+.wrangler/

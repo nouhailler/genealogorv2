@@ -3,6 +3,14 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.19.0] — 2026-10-26
+
+### 🌐 Ajouté — Page de présentation `/decouvrir/`
+- Landing page statique (HTML/CSS, sans dépendance) servie à `/decouvrir/` : présentation, fonctionnalités vérifiées, captures réelles avec une famille fictive, données personnelles, installation, FAQ.
+- L'application à `/` n'est pas modifiée ; aucun changement de build ni de configuration Cloudflare.
+- Ajout de `robots.txt` et `sitemap.xml` (ces adresses renvoyaient la page de l'application).
+- Test `landing-page.test.ts` (liens, métadonnées, CTA, absence de traceurs) ; documentation dans `docs/landing-page.md`.
+
 ## [2.18.2] — 2026-10-25
 
 ### 🧩 Corrigé — Barre du haut : textes et boutons superposés sur ordinateur

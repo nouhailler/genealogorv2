@@ -227,6 +227,13 @@ L'application est disponible sur **`http://localhost:3000`**.
 
 ---
 
+## 🌐 Page de présentation (`/decouvrir/`)
+
+Une landing page statique présente l'application aux nouveaux visiteurs : **https://genealogor.swinux.ch/decouvrir/**.
+Ses fichiers sont dans `public/decouvrir/` (HTML + CSS + un petit script, sans dépendance) et sont copiés dans `dist/` par le build : aucune configuration supplémentaire. L'application reste servie à `/`. Détails, captures fictives et retour arrière : [`docs/landing-page.md`](docs/landing-page.md).
+
+---
+
 ## ☁️ Déploiement Cloudflare
 
 Cloudflare héberge **l'interface React** (fichiers statiques de `dist/`). Le serveur Express/WebSocket (`server.ts`) n'y est pas exécuté.
