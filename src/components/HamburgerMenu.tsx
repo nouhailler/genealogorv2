@@ -3,7 +3,7 @@ import {
   Share2, Shield, Download, Upload, Settings, RefreshCw, 
   Moon, Sun, HelpCircle, HardDrive, Sparkles, Tag, ChevronRight,
   ShieldAlert, Smartphone, Database, Check, FolderTree,
-  Layers, Network, ShieldCheck, Columns, Building2
+  Layers, Network, ShieldCheck, Columns, Building2, Info, ArrowUpRight
 } from 'lucide-react';
 import { ActiveTab } from './Navbar';
 import { Logo } from './Logo';
@@ -510,6 +510,21 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   v{APP_METADATA.version}
                 </span>
               </button>
+
+              {/* À propos : page de présentation publique (nouvel onglet, l'arbre reste ouvert) */}
+              <a
+                href="/decouvrir/"
+                target="_blank"
+                rel="noopener"
+                onClick={onClose}
+                className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800/60 text-stone-700 dark:text-stone-300 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Info className="w-4 h-4 text-sky-700 dark:text-sky-400" />
+                  <span>À propos de Genealogor</span>
+                </div>
+                <ArrowUpRight className="w-4 h-4 text-stone-400" aria-hidden="true" />
+              </a>
 
               {/* Mentions légales */}
               <button

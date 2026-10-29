@@ -331,6 +331,15 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                 <span>Revoir les mentions légales de non-responsabilité et la présentation</span>
                 <ArrowUpRight className="w-3.5 h-3.5 text-stone-400" />
               </button>
+              <a
+                href="/decouvrir/"
+                target="_blank"
+                rel="noopener"
+                className="mt-2 w-full py-2 px-3 text-xs font-medium text-stone-700 dark:text-stone-300 bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 rounded-lg flex items-center justify-between transition-colors cursor-pointer"
+              >
+                <span>À propos de Genealogor : fonctionnalités, données personnelles, FAQ</span>
+                <ArrowUpRight className="w-3.5 h-3.5 text-stone-400" aria-hidden="true" />
+              </a>
             </div>
           </div>
 

@@ -1172,6 +1172,8 @@ async function startServer() {
       server: { middlewareMode: true, hmr: process.env.DISABLE_HMR !== 'true' },
       appType: 'spa',
     });
+    // Landing page statique : en dev, Vite ne sert pas l'index d'un sous-dossier de public/ (repli SPA)
+    app.use('/decouvrir', express.static(path.join(__dirname, 'public', 'decouvrir')));
     app.use(vite.middlewares);
   } else {
     app.use(express.static(path.join(__dirname, 'dist')));

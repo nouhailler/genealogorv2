@@ -34,6 +34,12 @@ modification de `vite.config.ts`, de `server.ts` ni du routage de l'application.
 **Retour arrière** : supprimer `public/decouvrir/` (et éventuellement `robots.txt`, `sitemap.xml`),
 reconstruire et redéployer. L'application n'est pas touchée.
 
+## Liens depuis l'application
+
+« À propos de Genealogor » dans le menu principal (rubrique Système & Préférences, `HamburgerMenu.tsx`) et dans
+les Paramètres système (`SystemSettingsModal.tsx`). Le lien s'ouvre dans un nouvel onglet (`target="_blank"`).
+En développement, `server.ts` sert `public/decouvrir/` avant le middleware Vite, qui sinon renverrait l'application.
+
 ## Déploiement Cloudflare
 
 Aucune modification de configuration : la page fait partie de `dist/`.

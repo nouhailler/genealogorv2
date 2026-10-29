@@ -3,6 +3,12 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.19.1] — 2026-10-29
+
+### 🔗 Ajouté — Lien « À propos de Genealogor »
+- Menu principal (rubrique Système & Préférences) et Paramètres système : lien « À propos de Genealogor » vers la page de présentation `/decouvrir/`, ouverte dans un nouvel onglet pour ne pas quitter l'arbre.
+- `npm run dev` sert désormais `/decouvrir/` comme en production (Vite renvoyait l'application).
+
 ## [2.19.0] — 2026-10-26
 
 ### 🌐 Ajouté — Page de présentation `/decouvrir/`
