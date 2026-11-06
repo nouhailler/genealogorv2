@@ -3,6 +3,12 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.19.3] — 2026-11-06
+
+### 🏷️ Corrigé — Photos : bouton « Enregistrer le tag » caché
+- La fenêtre « Identifier une personne » s'ouvrait sous le repère et était coupée par le bord de la photo : le bouton « Enregistrer le tag » n'était accessible qu'au clavier.
+- Elle s'affiche désormais entièrement dans la zone photo, du côté opposé au repère, avec défilement interne si la place manque. Elle ne suit plus le zoom ni la rotation de l'image. Vérifié sur ordinateur et sur mobile (375 px).
+
 ## [2.19.2] — 2026-11-06
 
 ### 🔍 Ajouté — Recherche de personne dans « Rattacher manuellement »

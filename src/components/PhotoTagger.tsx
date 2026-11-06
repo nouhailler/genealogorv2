@@ -375,111 +375,116 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
                 <Plus className="w-4 h-4" />
               </div>
 
-              {/* Tagging Card Form */}
-              <div className="absolute top-full mt-3 left-1/2 -translate-x-1/2 w-80 bg-white border border-stone-300 rounded-2xl shadow-2xl p-4 text-left z-50 animate-in fade-in zoom-in-95">
-                <div className="flex items-center justify-between border-b border-stone-200 pb-2 mb-3">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-stone-900">
-                    <Tag className="w-3.5 h-3.5 text-amber-800" />
-                    <span>{activeTagForEdit ? 'Modifier le tag' : 'Identifier une personne'}</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setNewTagPosition(null);
-                      setActiveTagForEdit(null);
-                    }}
-                    className="text-stone-400 hover:text-stone-700"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {/* Person Search & Selector */}
-                  <div>
-                    <label className="block text-[11px] font-semibold text-stone-700 mb-1">
-                      Choisir une personne de l'arbre
-                    </label>
-
-                    {/* Search input */}
-                    <div className="relative mb-2">
-                      <input
-                        type="text"
-                        value={personSearch}
-                        onChange={e => setPersonSearch(e.target.value)}
-                        placeholder="Rechercher par prénom, nom..."
-                        className="w-full text-xs bg-stone-50 border border-stone-200 rounded-lg pl-7 pr-2.5 py-1.5 text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-800"
-                      />
-                      <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2 top-2" />
-                    </div>
-
-                    {/* Quick suggestion list */}
-                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1 border border-stone-100 rounded-lg p-1 bg-stone-50/50">
-                      {filteredPeople.map(p => {
-                        const isChosen = selectedPersonId === p.id;
-                        return (
-                          <div
-                            key={p.id}
-                            onClick={() => setSelectedPersonId(p.id)}
-                            className={`flex items-center justify-between p-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
-                              isChosen 
-                                ? 'bg-amber-100/90 text-amber-950 font-semibold ring-1 ring-amber-600' 
-                                : 'hover:bg-white text-stone-700'
-                            }`}
-                          >
-                            <div className="flex items-center gap-1.5 truncate">
-                              <span className={`w-2 h-2 rounded-full shrink-0 ${p.sex === 'M' ? 'bg-blue-600' : 'bg-rose-500'}`} />
-                              <span className="truncate">{p.name}</span>
-                            </div>
-                            <span className="text-[10px] text-stone-400 shrink-0 font-mono">
-                              {p.birth?.date ? p.birth.date.slice(-4) : ''}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Optional label / role description */}
-                  <div>
-                    <label className="block text-[11px] font-semibold text-stone-700 mb-1">
-                      Précision ou rôle sur la photo <span className="font-normal text-stone-400">(facultatif)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={tagLabel}
-                      onChange={e => setTagLabel(e.target.value)}
-                      placeholder="Ex: Assis au 1er rang, Au bras de sa mère..."
-                      className="w-full text-xs bg-stone-50 border border-stone-200 rounded-lg p-2 text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-800"
-                    />
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewTagPosition(null);
-                        setActiveTagForEdit(null);
-                      }}
-                      className="px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-100 rounded-lg"
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSaveTag}
-                      disabled={!selectedPersonId}
-                      className="px-4 py-1.5 text-xs font-semibold text-white bg-amber-900 hover:bg-amber-950 disabled:opacity-40 rounded-lg shadow-sm"
-                    >
-                      {activeTagForEdit ? 'Mettre à jour' : 'Enregistrer le tag'}
-                    </button>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
         </div>
+
+        {/* Tagging Card Form — hors du conteneur zoomé/tourné, toujours entièrement visible dans la zone photo */}
+        {newTagPosition && (
+          <div
+            className={`absolute top-1/2 -translate-y-1/2 ${newTagPosition.x < 50 ? 'right-3' : 'left-3'} w-[min(20rem,calc(100%-1.5rem))] max-h-[calc(100%-1.5rem)] overflow-y-auto bg-white border border-stone-300 rounded-2xl shadow-2xl p-4 text-left z-50 animate-in fade-in zoom-in-95`}
+          >
+            <div className="flex items-center justify-between border-b border-stone-200 pb-2 mb-3">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-stone-900">
+                <Tag className="w-3.5 h-3.5 text-amber-800" />
+                <span>{activeTagForEdit ? 'Modifier le tag' : 'Identifier une personne'}</span>
+              </div>
+              <button
+                onClick={() => {
+                  setNewTagPosition(null);
+                  setActiveTagForEdit(null);
+                }}
+                className="text-stone-400 hover:text-stone-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {/* Person Search & Selector */}
+              <div>
+                <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+                  Choisir une personne de l'arbre
+                </label>
+
+                {/* Search input */}
+                <div className="relative mb-2">
+                  <input
+                    type="text"
+                    value={personSearch}
+                    onChange={e => setPersonSearch(e.target.value)}
+                    placeholder="Rechercher par prénom, nom..."
+                    className="w-full text-xs bg-stone-50 border border-stone-200 rounded-lg pl-7 pr-2.5 py-1.5 text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-800"
+                  />
+                  <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2 top-2" />
+                </div>
+
+                {/* Quick suggestion list */}
+                <div className="max-h-36 overflow-y-auto space-y-1 pr-1 border border-stone-100 rounded-lg p-1 bg-stone-50/50">
+                  {filteredPeople.map(p => {
+                    const isChosen = selectedPersonId === p.id;
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => setSelectedPersonId(p.id)}
+                        className={`flex items-center justify-between p-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
+                          isChosen 
+                            ? 'bg-amber-100/90 text-amber-950 font-semibold ring-1 ring-amber-600' 
+                            : 'hover:bg-white text-stone-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${p.sex === 'M' ? 'bg-blue-600' : 'bg-rose-500'}`} />
+                          <span className="truncate">{p.name}</span>
+                        </div>
+                        <span className="text-[10px] text-stone-400 shrink-0 font-mono">
+                          {p.birth?.date ? p.birth.date.slice(-4) : ''}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Optional label / role description */}
+              <div>
+                <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+                  Précision ou rôle sur la photo <span className="font-normal text-stone-400">(facultatif)</span>
+                </label>
+                <input
+                  type="text"
+                  value={tagLabel}
+                  onChange={e => setTagLabel(e.target.value)}
+                  placeholder="Ex: Assis au 1er rang, Au bras de sa mère..."
+                  className="w-full text-xs bg-stone-50 border border-stone-200 rounded-lg p-2 text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-800"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewTagPosition(null);
+                    setActiveTagForEdit(null);
+                  }}
+                  className="px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-100 rounded-lg"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveTag}
+                  disabled={!selectedPersonId}
+                  className="px-4 py-1.5 text-xs font-semibold text-white bg-amber-900 hover:bg-amber-950 disabled:opacity-40 rounded-lg shadow-sm"
+                >
+                  {activeTagForEdit ? 'Mettre à jour' : 'Enregistrer le tag'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Roster of identified individuals on this photograph */}
