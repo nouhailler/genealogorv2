@@ -3,6 +3,12 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.20.4] — 2026-11-06
+
+### 🏷️ Modifié — Le nom d'une personne identifiée ne cache plus son visage
+- Au survol d'un repère, le nom (page de photo partagée) et la carte de la personne (fiche d'archive dans l'application) s'affichent désormais **sous** le repère, et non plus au-dessus. On peut donc placer le repère directement sur le visage, même quand les visages se touchent sur une photo de groupe.
+- Près du bas de l'image, ils restent au-dessus du repère pour ne pas sortir du cadre ; près des bords gauche et droit, la carte s'aligne sur le bord.
+
 ## [2.20.3] — 2026-11-06
 
 ### 📦 Ajouté — Export et import GEDCOM 7 avec médias (GEDZIP `.gdz`)

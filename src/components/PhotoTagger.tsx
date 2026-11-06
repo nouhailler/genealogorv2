@@ -303,7 +303,10 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
                 {/* Floating Tooltip Card on Hover */}
                 {isHovered && !newTagPosition && (
                   <div 
-                    className={`absolute bottom-full mb-3 left-1/2 -translate-x-1/2 w-64 bg-[#FBF9F5] text-stone-900 rounded-xl p-3 shadow-2xl border border-amber-800/20 z-40 text-left pointer-events-auto animate-in fade-in zoom-in-95 duration-150`}
+                    // Sous le repère pour ne pas masquer le visage ; au-dessus près du bas (la zone photo coupe ce qui dépasse)
+                    className={`absolute ${tag.y > 65 ? 'bottom-full mb-3' : 'top-full mt-3'} ${
+                      tag.x < 20 ? 'left-0' : tag.x > 80 ? 'right-0' : 'left-1/2 -translate-x-1/2'
+                    } w-64 bg-[#FBF9F5] text-stone-900 rounded-xl p-3 shadow-2xl border border-amber-800/20 z-40 text-left pointer-events-auto animate-in fade-in zoom-in-95 duration-150`}
                   >
                     <div className="flex items-start justify-between gap-2 border-b border-stone-200/80 pb-2">
                       <div className="flex items-center gap-2">

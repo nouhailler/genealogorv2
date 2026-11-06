@@ -65,7 +65,8 @@ export const SharedPhotoView: React.FC<SharedPhotoViewProps> = ({ snapshot }) =>
                 >
                   <span className="text-[10px] sm:text-[11px] font-bold font-mono">{tag.n}</span>
                   {active && (
-                    <span className={`absolute bottom-full mb-2 ${
+                    // Sous le repère pour ne pas masquer le visage ; au-dessus seulement tout en bas de l'image
+                    <span className={`absolute ${tag.y > 88 ? 'bottom-full mb-2' : 'top-full mt-2'} ${
                       tag.x < 25 ? 'left-0' : tag.x > 75 ? 'right-0' : 'left-1/2 -translate-x-1/2'
                     } max-w-[60vw] truncate whitespace-nowrap px-2 py-1 rounded-md bg-white text-stone-900 text-xs font-semibold shadow-lg pointer-events-none`}>
                       {tag.name}
