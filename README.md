@@ -56,8 +56,10 @@ Accessible depuis le coin supérieur gauche de la barre de navigation, le tiroir
    - Salle collaborative temps réel avec compteur de pairs connectés
    - Synchronisation Cloud Firebase Firestore
 - **3. 💾 Données & Sauvegardes** :
-   - Importer / Exporter au standard GEDCOM 5.5.1
+   - Importer / Exporter au standard GEDCOM 5.5.1, et en GEDCOM 7 avec médias (GEDZIP `.gdz`)
    - Sauvegarde intégrale chiffrée en AES-GCM 256 bits avec dérivation PBKDF2
+   - La sauvegarde complète (`.genealogor.json`) contient **tout** : individus, familles, sources, photos et actes numérisés en pleine résolution, personnes identifiées sur les photos (positions des repères), règles de partage, liens photo partagés et journal des modifications. Jusqu'à 500 Mo par fichier, 100 Mo par document.
+   - Le GEDCOM 5.5.1 (`.ged`) sert à l'échange de l'arbre seul. L'export **GEDCOM 7 avec médias (GEDZIP, `.gdz`)** emporte aussi les photos et actes numérisés et les personnes identifiées sur les photos (zones `CROP`), et se réimporte sans perte dans Genealogor : voir [docs/gedzip.md](docs/gedzip.md).
    - Restauration sécurisée avec sauvegarde préalable d'annulation
 - **4. ⚙️ Paramètres Système & Accessibilité** :
    - Paramètres système, version et mises à jour

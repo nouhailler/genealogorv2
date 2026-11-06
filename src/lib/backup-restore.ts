@@ -3,6 +3,8 @@ import { GenealogyData, ArchiveDocument, BranchAccess } from '../types/genealogy
 import { STORAGE_KEYS } from './storage-manager';
 import { encryptData, decryptData } from './crypto';
 import { validateBackupPayload, BackupValidationSummary, BACKUP_LIMITS } from './backup-validation';
+import type { PhotoShareRecord } from './photo-share';
+import type { ChangeEvent } from './change-log';
 
 export { BACKUP_LIMITS };
 
@@ -16,18 +18,31 @@ export interface BackupManifest {
     familiesCount: number;
     archivesCount: number;
     accessRulesCount: number;
+    /** Fichiers joints (photos, actes numérisés) inclus — absent des sauvegardes antérieures à 2.20.2 */
+    filesCount?: number;
+    /** Personnes identifiées sur les photos */
+    photoTagsCount?: number;
   };
   checksumSha256: string;
   isEncrypted?: boolean;
 }
 
+/** Données de l'arbre hors individus et archives : liens photo partagés, journal des modifications */
+export interface BackupExtras {
+  photoShares?: PhotoShareRecord[];
+  changeLog?: ChangeEvent[];
+}
+
+export interface BackupPayload {
+  genealogy: GenealogyData;
+  archives: ArchiveDocument[];
+  accessList: BranchAccess[];
+  extras?: BackupExtras;
+}
+
 export interface BackupPackage {
   manifest: BackupManifest;
-  payload?: {
-    genealogy: GenealogyData;
-    archives: ArchiveDocument[];
-    accessList: BranchAccess[];
-  };
+  payload?: BackupPayload;
   encryptedPayload?: string;
 }
 
@@ -62,15 +77,17 @@ export async function createFullBackup(
   genealogy: GenealogyData,
   archives: ArchiveDocument[],
   accessList: BranchAccess[],
-  passphrase?: string
+  passphrase?: string,
+  extras?: BackupExtras
 ): Promise<string> {
   const individuals = Object.values(genealogy.individuals || {});
   const families = Object.values(genealogy.families || {});
 
-  const payload = {
+  const payload: BackupPayload = {
     genealogy,
     archives,
     accessList,
+    ...(extras && (extras.photoShares?.length || extras.changeLog?.length) ? { extras } : {}),
   };
 
   const payloadString = JSON.stringify(payload);
@@ -80,7 +97,7 @@ export async function createFullBackup(
 
   const manifest: BackupManifest = {
     format: isEncrypted ? 'genealogor-backup-v2-encrypted' : 'genealogor-backup-v2',
-    appVersion: '2.0.0',
+    appVersion: '2.20.2',
     exportedAt: new Date().toISOString(),
     treeTitle: genealogy.sourceHeader || 'Arbre Familial',
     stats: {
@@ -88,6 +105,8 @@ export async function createFullBackup(
       familiesCount: families.length,
       archivesCount: archives.length,
       accessRulesCount: accessList.length,
+      filesCount: archives.filter(a => a.fileData).length,
+      photoTagsCount: archives.reduce((n, a) => n + (a.photoTags?.length || 0), 0),
     },
     checksumSha256: checksum,
     isEncrypted,
@@ -114,7 +133,7 @@ export async function createFullBackup(
  * Prévisualise et valide l'intégrité et la conformité d'une sauvegarde avant restauration :
  * - Détecte les sauvegardes chiffrées et vérifie la phrase secrète AES-GCM.
  * - Contrôle formel de l'empreinte SHA-256.
- * - Validation stricte du schéma de données et limites de taille (50 Mo, 50 000 individus).
+ * - Validation stricte du schéma de données et limites de taille (500 Mo, 50 000 individus).
  * - Contrôle de la cohérence relationnelle (références croisées individus, familles, archives).
  */
 export async function previewBackup(jsonContent: string, passphrase?: string): Promise<BackupPreview> {
@@ -123,7 +142,7 @@ export async function previewBackup(jsonContent: string, passphrase?: string): P
     if (jsonContent.length > BACKUP_LIMITS.MAX_FILE_BYTES) {
       return {
         isValid: false,
-        error: `Fichier de sauvegarde trop volumineux (${Math.round(jsonContent.length / (1024 * 1024))} Mo). Limite autorisée : 50 Mo.`,
+        error: `Fichier de sauvegarde trop volumineux (${Math.round(jsonContent.length / (1024 * 1024))} Mo). Limite autorisée : ${BACKUP_LIMITS.MAX_FILE_BYTES / (1024 * 1024)} Mo.`,
       };
     }
 
@@ -246,7 +265,7 @@ export async function restoreBackup(
   passphrase?: string
 ): Promise<{ 
   success: boolean; 
-  data?: NonNullable<BackupPackage['payload']>; 
+  data?: BackupPayload; 
   error?: string;
   warnings?: string[];
 }> {
@@ -273,16 +292,7 @@ export async function restoreBackup(
     };
   }
 
-  // Créer la sauvegarde pré-restauration de sécurité
-  if (typeof localStorage !== 'undefined') {
-    try {
-      // Sans les images (conservées dans IndexedDB) : sinon cette copie saturait le localStorage
-      const preRestoreSafety = await createFullBackup(currentGenealogy, stripArchiveImages(currentArchives), currentAccess);
-      localStorage.setItem(STORAGE_KEYS.PRE_RESTORE_BACKUP, preRestoreSafety);
-    } catch (e) {
-      console.warn('Impossible de créer la sauvegarde pré-restauration', e);
-    }
-  }
+  await savePreRestoreSafety(currentGenealogy, currentArchives, currentAccess);
 
   return {
     success: true,
@@ -292,9 +302,28 @@ export async function restoreBackup(
 }
 
 /**
+ * Copie de secours de l'état actuel avant un remplacement (restauration, import GEDZIP), pour
+ * « Annuler dernière restauration ». Sans les images, qui restent dans IndexedDB : sinon cette copie
+ * saturait le localStorage.
+ */
+export async function savePreRestoreSafety(
+  currentGenealogy: GenealogyData,
+  currentArchives: ArchiveDocument[],
+  currentAccess: BranchAccess[]
+): Promise<void> {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const preRestoreSafety = await createFullBackup(currentGenealogy, stripArchiveImages(currentArchives), currentAccess);
+    localStorage.setItem(STORAGE_KEYS.PRE_RESTORE_BACKUP, preRestoreSafety);
+  } catch (e) {
+    console.warn('Impossible de créer la sauvegarde pré-restauration', e);
+  }
+}
+
+/**
  * Restaure la sauvegarde de secours préalable s'il y a lieu.
  */
-export function restorePreBackupSafety(): BackupPackage['payload'] | null {
+export function restorePreBackupSafety(): BackupPayload | null {
   if (typeof localStorage === 'undefined') return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.PRE_RESTORE_BACKUP);

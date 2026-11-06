@@ -3,6 +3,30 @@ import { shouldProtectPerson, sanitizePersonForPrivacy, sanitizeFamilyForPrivacy
 
 export interface GedcomExportOptions {
   hideLiving?: boolean;
+  /** Version de la norme : 5.5.1 (par défaut) ou 7.0 (utilisée par l'export GEDZIP) */
+  version?: '5.5.1' | '7.0';
+  /** Lignes ajoutées à la fin d'un enregistrement INDI (ex. liens multimédias `1 OBJE @O1@`) */
+  extraIndividualLines?: (id: string) => string[];
+  /** Lignes ajoutées à la fin d'un enregistrement FAM */
+  extraFamilyLines?: (id: string) => string[];
+  /** Enregistrements supplémentaires placés avant TRLR (ex. `0 @O1@ OBJE`) */
+  extraRecords?: string[];
+  /** Définitions des balises d'extension (`HEAD.SCHMA.TAG`), GEDCOM 7 */
+  schemaTags?: Array<{ tag: string; uri: string }>;
+}
+
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+/** Date exacte GEDCOM (`6 NOV 2026`) */
+export function gedcomExactDate(d: Date): string {
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Texte multiligne : première ligne sur la balise, suivantes en CONT (GEDCOM 7 n'a pas de CONC) */
+export function textLines(level: number, tag: string, text: string): string[] {
+  // Une valeur texte ne peut pas commencer par « @ » (confusion avec un pointeur) : « @@ »
+  const parts = text.split(/\r?\n/).map(p => p.replace(/^@/, '@@'));
+  return [`${level} ${tag} ${parts[0]}`.trimEnd(), ...parts.slice(1).map(p => `${level + 1} CONT ${p}`.trimEnd())];
 }
 
 export interface GedcomExportResult {
@@ -25,16 +49,32 @@ export function serializeGedcomWithReport(data: GenealogyData, options: GedcomEx
   const hideLiving = options.hideLiving ?? false;
   let maskedLivingCount = 0;
 
+  const v7 = options.version === '7.0';
+
   // Header
   lines.push('0 HEAD');
-  lines.push('1 SOUR Genealogor');
-  lines.push('2 VERS 2.0.0');
-  lines.push('2 NAME Genealogor — Arbre Familial & Archives');
-  lines.push('1 DATE ' + new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase());
-  lines.push('1 GEDC');
-  lines.push('2 VERS 5.5.1');
-  lines.push('2 FORM LINEAGE-LINKED');
-  lines.push('1 CHAR UTF-8');
+  if (v7) {
+    // GEDCOM 7 : GEDC en premier, pas de CHAR (UTF-8 obligatoire) ni de FORM
+    lines.push('1 GEDC');
+    lines.push('2 VERS 7.0');
+    if (options.schemaTags?.length) {
+      lines.push('1 SCHMA');
+      for (const { tag, uri } of options.schemaTags) lines.push(`2 TAG ${tag} ${uri}`);
+    }
+    lines.push('1 SOUR Genealogor');
+    lines.push('2 VERS 2.20.3');
+    lines.push('2 NAME Genealogor — Arbre Familial & Archives');
+    lines.push('1 DATE ' + gedcomExactDate(new Date()));
+  } else {
+    lines.push('1 SOUR Genealogor');
+    lines.push('2 VERS 2.0.0');
+    lines.push('2 NAME Genealogor — Arbre Familial & Archives');
+    lines.push('1 DATE ' + new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase());
+    lines.push('1 GEDC');
+    lines.push('2 VERS 5.5.1');
+    lines.push('2 FORM LINEAGE-LINKED');
+    lines.push('1 CHAR UTF-8');
+  }
 
   // Sources (Level 0)
   const sources = data.sources || {};
@@ -46,7 +86,7 @@ export function serializeGedcomWithReport(data: GenealogyData, options: GedcomEx
     if (src.callNumber) lines.push(`1 CALN ${src.callNumber}`);
     if (src.notes) {
       for (const note of src.notes) {
-        lines.push(`1 NOTE ${note}`);
+        lines.push(...textLines(1, 'NOTE', note));
       }
     }
   }
@@ -144,6 +184,12 @@ export function serializeGedcomWithReport(data: GenealogyData, options: GedcomEx
 
     if (indi.media) {
       for (const m of indi.media) {
+        if (v7) {
+          // GEDCOM 7 n'admet plus d'OBJE intégré ; la référence d'origine est conservée en note
+          const ref = [m.title, m.file, m.format].filter(Boolean).join(' — ');
+          if (ref) lines.push(`1 NOTE Média d'origine : ${ref}`);
+          continue;
+        }
         lines.push('1 OBJE');
         if (m.file) lines.push(`2 FILE ${m.file}`);
         if (m.format) lines.push(`2 FORM ${m.format}`);
@@ -166,6 +212,8 @@ export function serializeGedcomWithReport(data: GenealogyData, options: GedcomEx
         lines.push(`${t.level} ${t.tag} ${t.value}`);
       }
     }
+
+    if (options.extraIndividualLines) lines.push(...options.extraIndividualLines(rawIndi.id));
   }
 
   // Families
@@ -206,6 +254,12 @@ export function serializeGedcomWithReport(data: GenealogyData, options: GedcomEx
 
     if (fam.media) {
       for (const m of fam.media) {
+        if (v7) {
+          // GEDCOM 7 n'admet plus d'OBJE intégré ; la référence d'origine est conservée en note
+          const ref = [m.title, m.file, m.format].filter(Boolean).join(' — ');
+          if (ref) lines.push(`1 NOTE Média d'origine : ${ref}`);
+          continue;
+        }
         lines.push('1 OBJE');
         if (m.file) lines.push(`2 FILE ${m.file}`);
         if (m.format) lines.push(`2 FORM ${m.format}`);
@@ -215,7 +269,7 @@ export function serializeGedcomWithReport(data: GenealogyData, options: GedcomEx
 
     if (fam.notes) {
       for (const note of fam.notes) {
-        lines.push(`1 NOTE ${note}`);
+        lines.push(...textLines(1, 'NOTE', note));
       }
     }
 
@@ -224,7 +278,11 @@ export function serializeGedcomWithReport(data: GenealogyData, options: GedcomEx
         lines.push(`${t.level} ${t.tag} ${t.value}`);
       }
     }
+
+    if (options.extraFamilyLines) lines.push(...options.extraFamilyLines(rawFam.id));
   }
+
+  if (options.extraRecords) lines.push(...options.extraRecords);
 
   lines.push('0 TRLR');
 

@@ -3,6 +3,28 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.20.3] — 2026-11-06
+
+### 📦 Ajouté — Export et import GEDCOM 7 avec médias (GEDZIP `.gdz`)
+- Fichiers & Sauvegardes : **Exporter en GEDZIP (.gdz)** et **Importer un fichier .gdz**. L'archive contient `gedcom.ged` (GEDCOM 7.0) et les fichiers des documents (photos, actes numérisés).
+- Chaque personne identifiée sur une photo devient un lien `OBJE` dans sa fiche avec la zone `CROP` en pixels (norme GEDCOM 7) et la précision en `TITL` : les logiciels compatibles retrouvent qui est où sur la photo.
+- Les données propres à Genealogor (type d'acte, cote, dépôt, position exacte et ordre des repères…) sont dans des balises d'extension `_GN_*` déclarées dans `HEAD.SCHMA` et documentées dans `docs/gedzip.md` : un export Genealogor se réimporte sans perte (fichiers identiques au bit près, repères, numérotation).
+- Import d'un GEDZIP d'un autre logiciel : zones `CROP` converties en repères, liens simples en personnes liées ; fichiers manquants signalés. L'import remplace l'arbre et les documents, avec copie de secours (« Annuler dernière restauration »).
+- L'option « Masquer les personnes vivantes » s'applique aussi aux documents et repères exportés.
+- ZIP lu et écrit sans dépendance (`src/lib/zip.ts`, contrôle CRC-32, noms UTF-8) ; vérifié avec Python et `unzip`.
+- Import GEDCOM : un lien `1 OBJE @X@` ne crée plus de faux média intitulé « @X@ ».
+- Tests `gedzip.test.ts` ; vérifié dans l'application : export des photos réelles (mesure des images par le navigateur), import par le bouton, rechargement — photos et repère retrouvés.
+
+## [2.20.2] — 2026-11-06
+
+### 💾 Corrigé — La sauvegarde complète contient vraiment tout, et la restauration remet tout
+- **Photos et actes numérisés** : la sauvegarde ne contenait que les images déjà chargées à l'écran. Elle relit maintenant dans IndexedDB toutes les images, même celles pas encore affichées. Les documents dont le fichier est introuvable sur l'appareil (ajoutés depuis un autre appareil) sont signalés par leur nom.
+- **Taille** : limites portées de 50 Mo à 500 Mo par sauvegarde et de 15 Mo à 100 Mo par document ; un fichier plus gros était auparavant refusé à la restauration.
+- **Compléments** : la sauvegarde inclut aussi les liens photo partagés et le journal des modifications (les sauvegardes antérieures restent restaurables).
+- **Restauration et cloud** : connecté avec Google, les archives restaurées sont envoyées dans Firestore et celles absentes de la sauvegarde y sont retirées ; une synchronisation ne peut plus retirer une archive tout juste restaurée.
+- La fenêtre indique ce que contient la sauvegarde ; le message de fin et l'aperçu avant restauration donnent le nombre de fichiers et de personnes identifiées sur les photos.
+- Test `backup-full-roundtrip.test.ts` : aller-retour standard et chiffré (photo, acte PDF, image restée dans IndexedDB, repères, compléments), sauvegarde de plus de 60 Mo, fichiers introuvables. Vérifié dans l'application : sauvegarde, arbre vidé (images effacées), restauration, rechargement — photos de 8,4 Mo et 1,1 Mo et repère retrouvés.
+
 ## [2.20.1] — 2026-11-06
 
 ### 🖼️ Corrigé — Les photos disparaissaient après une mise à jour ou un rechargement

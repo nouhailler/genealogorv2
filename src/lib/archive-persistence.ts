@@ -136,3 +136,36 @@ export function mergeRemoteArchives(
   const toUpload = local.filter(l => !remoteIds.has(l.id) && !knownCloudIds.has(l.id));
   return { merged: [...toUpload, ...fromRemote], toUpload };
 }
+
+// --- Sauvegarde complète ---
+
+/** Un document qui a (ou avait) une image : fichier présent, déjà stocké, ou décrit par un type image/PDF */
+function expectsFile(a: ArchiveDocument): boolean {
+  return Boolean(a.fileData || a.imageStored || a.fileName || a.mimeType);
+}
+
+/**
+ * Complète les archives avec leurs images stockées dans IndexedDB avant une sauvegarde, pour que le
+ * fichier contienne tout, même les images pas encore rechargées à l'écran.
+ * Retourne aussi les documents dont le fichier est introuvable sur cet appareil.
+ */
+export async function withStoredImages(
+  archives: ArchiveDocument[]
+): Promise<{ archives: ArchiveDocument[]; missing: ArchiveDocument[] }> {
+  const ids = archives.filter(a => !a.fileData && a.imageStored).map(a => a.id);
+  let images = new Map<string, string>();
+  if (ids.length > 0) {
+    try {
+      images = await getImages(ids);
+    } catch (e) {
+      console.warn('Lecture des images pour la sauvegarde impossible :', e);
+    }
+  }
+  const complete = archives.map(a => {
+    const fileData = a.fileData || images.get(a.id);
+    if (!fileData) return a;
+    const { imageStored, ...rest } = a;
+    return { ...rest, fileData };
+  });
+  return { archives: complete, missing: complete.filter(a => !a.fileData && expectsFile(a)) };
+}

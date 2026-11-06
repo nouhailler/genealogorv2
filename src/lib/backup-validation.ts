@@ -1,12 +1,14 @@
 import { GenealogyData, Individual, Family, ArchiveDocument, BranchAccess, ArchiveDocumentType, Sex } from '../types/genealogy';
 
 export const BACKUP_LIMITS = {
-  MAX_FILE_BYTES: 50 * 1024 * 1024,      // 50 MB max backup file size
+  // Les photos et actes numérisés sont inclus : la taille réaliste d'une sauvegarde complète se compte
+  // en centaines de Mo. 500 Mo reste sous la longueur maximale d'une chaîne dans les navigateurs.
+  MAX_FILE_BYTES: 500 * 1024 * 1024,     // 500 MB max backup file size
   MAX_INDIVIDUALS: 50000,                // 50,000 individuals max
   MAX_FAMILIES: 25000,                   // 25,000 families max
   MAX_ARCHIVES: 5000,                    // 5,000 documents max
   MAX_ACCESS_RULES: 500,                 // 500 access rules max
-  MAX_SINGLE_ARCHIVE_BYTES: 15 * 1024 * 1024, // 15 MB max per base64 file
+  MAX_SINGLE_ARCHIVE_BYTES: 100 * 1024 * 1024, // 100 MB max per base64 file
 };
 
 const VALID_ARCHIVE_TYPES: Set<string> = new Set([
@@ -37,6 +39,7 @@ export interface BackupValidationResult {
     genealogy: GenealogyData;
     archives: ArchiveDocument[];
     accessList: BranchAccess[];
+    extras?: { photoShares?: any[]; changeLog?: any[] };
   };
 }
 
@@ -58,7 +61,7 @@ export function validateBackupPayload(
   // 1. Limite de taille globale du fichier
   if (rawCharLength && rawCharLength > BACKUP_LIMITS.MAX_FILE_BYTES) {
     schemaErrors.push(
-      `Taille de sauvegarde excessive : ${Math.round(rawCharLength / (1024 * 1024))} Mo (limite autorisée : 50 Mo).`
+      `Taille de sauvegarde excessive : ${Math.round(rawCharLength / (1024 * 1024))} Mo (limite autorisée : ${BACKUP_LIMITS.MAX_FILE_BYTES / (1024 * 1024)} Mo).`
     );
     return {
       isValid: false,
@@ -346,7 +349,7 @@ export function validateBackupPayload(
 
     // Contrôle taille unitaire de fichier base64
     if (rawArc.fileData && typeof rawArc.fileData === 'string' && rawArc.fileData.length > BACKUP_LIMITS.MAX_SINGLE_ARCHIVE_BYTES) {
-      integrityErrors.push(`Le fichier joint de l'archive "${title}" (${arcId}) dépasse la taille maximale autorisée (15 Mo).`);
+      integrityErrors.push(`Le fichier joint de l'archive "${title}" (${arcId}) dépasse la taille maximale autorisée (${BACKUP_LIMITS.MAX_SINGLE_ARCHIVE_BYTES / (1024 * 1024)} Mo).`);
       continue;
     }
 
@@ -410,6 +413,18 @@ export function validateBackupPayload(
 
   const isValid = schemaErrors.length === 0 && integrityErrors.length === 0;
 
+
+  // 10. Compléments facultatifs (sauvegardes 2.20.2+) : liens photo partagés, journal des modifications
+  const rawExtras = payload.extras && typeof payload.extras === 'object' ? payload.extras : null;
+  const isObj = (x: any) => x && typeof x === 'object' && !Array.isArray(x);
+  const photoShares = Array.isArray(rawExtras?.photoShares)
+    ? rawExtras.photoShares.filter((r: any) => isObj(r) && typeof r.token === 'string' && typeof r.key === 'string' && typeof r.archiveId === 'string')
+    : [];
+  const changeLog = Array.isArray(rawExtras?.changeLog) ? rawExtras.changeLog.filter(isObj) : [];
+  const sanitizedExtras = photoShares.length || changeLog.length
+    ? { ...(photoShares.length ? { photoShares } : {}), ...(changeLog.length ? { changeLog } : {}) }
+    : undefined;
+
   return {
     isValid,
     schemaErrors,
@@ -434,6 +449,7 @@ export function validateBackupPayload(
           },
           archives: sanitizedArchives,
           accessList: sanitizedAccessList,
+          ...(sanitizedExtras ? { extras: sanitizedExtras } : {}),
         }
       : undefined,
   };

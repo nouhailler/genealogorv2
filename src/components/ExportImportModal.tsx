@@ -6,7 +6,10 @@ import {
 import { GenealogyData, ArchiveDocument, BranchAccess } from '../types/genealogy';
 import { serializeGedcomWithReport } from '../lib/gedcom-serializer';
 import { parseGedcom } from '../lib/gedcom-parser';
-import { createFullBackup, previewBackup, restoreBackup, restorePreBackupSafety, BackupPreview } from '../lib/backup-restore';
+import { createFullBackup, previewBackup, restoreBackup, restorePreBackupSafety, BackupPreview, BackupPayload, BackupExtras } from '../lib/backup-restore';
+import { withStoredImages } from '../lib/archive-persistence';
+import { buildGedzip, readGedzip } from '../lib/gedzip';
+import { savePreRestoreSafety } from '../lib/backup-restore';
 import { sanitizeGenealogyDataForPrivacy, sanitizeArchivesForPrivacy, getProtectedPersonIds } from '../lib/privacy';
 import { evaluatePassphraseQuality } from '../lib/crypto';
 
@@ -17,7 +20,11 @@ interface ExportImportModalProps {
   archives: ArchiveDocument[];
   accessList: BranchAccess[];
   onLoadGedcom: (newData: GenealogyData) => void;
-  onRestoreBackup: (payload: { genealogy: GenealogyData; archives: ArchiveDocument[]; accessList: BranchAccess[] }) => void;
+  onRestoreBackup: (payload: BackupPayload) => void;
+  /** Import GEDZIP : remplace l'arbre et les documents */
+  onLoadGedzip?: (data: GenealogyData, archives: ArchiveDocument[]) => Promise<void>;
+  /** Liens photo partagés et journal des modifications, inclus dans la sauvegarde complète */
+  backupExtras?: BackupExtras;
   onClearTree?: () => void;
   userRole?: import('../types/genealogy').BranchRole;
 }
@@ -32,8 +39,13 @@ export const ExportImportModal: React.FC<ExportImportModalProps> = ({
   onRestoreBackup,
   onClearTree,
   userRole = 'viewer',
+  backupExtras,
+  onLoadGedzip,
 }) => {
   const fileInputGedRef = useRef<HTMLInputElement>(null);
+  const fileInputGedzipRef = useRef<HTMLInputElement>(null);
+  const [gedzipBusy, setGedzipBusy] = useState<null | 'export' | 'import'>(null);
+  const [gedzipError, setGedzipError] = useState<string | null>(null);
   const fileInputBackupRef = useRef<HTMLInputElement>(null);
 
   const [applyPrivacyOnBackup, setApplyPrivacyOnBackup] = useState(false);
@@ -54,14 +66,30 @@ export const ExportImportModal: React.FC<ExportImportModalProps> = ({
 
   if (!isOpen) return null;
 
-  const getEffectiveBackupData = () => {
+  /**
+   * Contenu de la sauvegarde complète : arbre, archives avec tous leurs fichiers (relus dans IndexedDB
+   * si besoin) et étiquettes, règles d'accès, liens photo et journal des modifications.
+   */
+  const getEffectiveBackupData = async () => {
+    const { archives: complete, missing } = await withStoredImages(archives);
     if (!applyPrivacyOnBackup) {
-      return { exportData: data, exportArchives: archives };
+      return { exportData: data, exportArchives: complete, extras: backupExtras, missing };
     }
     const sanitizedTree = sanitizeGenealogyDataForPrivacy(data);
     const protectedIds = getProtectedPersonIds(data);
-    const sanitizedArch = sanitizeArchivesForPrivacy(archives, protectedIds);
-    return { exportData: sanitizedTree, exportArchives: sanitizedArch };
+    const sanitizedArch = sanitizeArchivesForPrivacy(complete, protectedIds);
+    // Le journal cite des noms : il n'accompagne pas une sauvegarde anonymisée
+    const extras = backupExtras?.photoShares ? { photoShares: backupExtras.photoShares } : undefined;
+    return { exportData: sanitizedTree, exportArchives: sanitizedArch, extras, missing };
+  };
+
+  const describeBackup = (exportArchives: ArchiveDocument[], missing: ArchiveDocument[]) => {
+    const files = exportArchives.filter(a => a.fileData).length;
+    const tags = exportArchives.reduce((n, a) => n + (a.photoTags?.length || 0), 0);
+    const base = ` ${exportArchives.length} document(s), dont ${files} fichier(s) (photos, actes numérisés), et ${tags} personne(s) identifiée(s) sur les photos.`;
+    if (missing.length === 0) return base;
+    const names = missing.slice(0, 3).map(a => `« ${a.title} »`).join(', ');
+    return `${base} Attention : ${missing.length} fichier(s) introuvable(s) sur cet appareil (${names}${missing.length > 3 ? '…' : ''}), probablement ajouté(s) depuis un autre appareil : ouvrez Genealogor sur cet appareil pour les sauvegarder.`;
   };
 
   const handleDownloadGedcom = () => {
@@ -95,8 +123,9 @@ export const ExportImportModal: React.FC<ExportImportModalProps> = ({
     }
 
     try {
-      const { exportData, exportArchives } = getEffectiveBackupData();
-      const backupJson = await createFullBackup(exportData, exportArchives, accessList, pass);
+      const { exportData, exportArchives, extras, missing } = await getEffectiveBackupData();
+      const backupJson = await createFullBackup(exportData, exportArchives, accessList, pass, extras);
+      const contentSummary = describeBackup(exportArchives, missing);
       const blob = new Blob([backupJson], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -110,7 +139,7 @@ export const ExportImportModal: React.FC<ExportImportModalProps> = ({
       setExportPassphrase('');
       setConfirmExportPassphrase('');
       const privacyNotice = applyPrivacyOnBackup ? ' (avec confidentialité vivants appliquée)' : '';
-      setStatusMessage(`Sauvegarde chiffrée de bout en bout (AES-GCM 256 bits + SHA-256)${privacyNotice} téléchargée.`);
+      setStatusMessage(`Sauvegarde chiffrée de bout en bout (AES-GCM 256 bits + SHA-256)${privacyNotice} téléchargée :${contentSummary}`);
     } catch (e: any) {
       setExportError('Erreur de chiffrement : ' + (e?.message || 'échec technique.'));
     }
@@ -119,8 +148,9 @@ export const ExportImportModal: React.FC<ExportImportModalProps> = ({
   const handleDownloadPlainBackup = async () => {
     setExportError(null);
     try {
-      const { exportData, exportArchives } = getEffectiveBackupData();
-      const backupJson = await createFullBackup(exportData, exportArchives, accessList, undefined);
+      const { exportData, exportArchives, extras, missing } = await getEffectiveBackupData();
+      const backupJson = await createFullBackup(exportData, exportArchives, accessList, undefined, extras);
+      const contentSummary = describeBackup(exportArchives, missing);
       const blob = new Blob([backupJson], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -132,7 +162,7 @@ export const ExportImportModal: React.FC<ExportImportModalProps> = ({
       URL.revokeObjectURL(url);
 
       const privacyNotice = applyPrivacyOnBackup ? ' (avec confidentialité vivants appliquée)' : '';
-      setStatusMessage(`Sauvegarde standard (JSON clair avec contrôle d'intégrité SHA-256)${privacyNotice} téléchargée.`);
+      setStatusMessage(`Sauvegarde standard (JSON clair avec contrôle d'intégrité SHA-256)${privacyNotice} téléchargée :${contentSummary}`);
     } catch (e: any) {
       setExportError('Erreur d\'export : ' + (e?.message || 'échec technique.'));
     }
@@ -209,6 +239,62 @@ export const ExportImportModal: React.FC<ExportImportModalProps> = ({
       }
     };
     reader.readAsText(file);
+  };
+
+  // GEDCOM 7 + fichiers des archives + personnes identifiées sur les photos (zones CROP)
+  const handleDownloadGedzip = async () => {
+    setGedzipBusy('export');
+    setGedzipError(null);
+    try {
+      const { archives: complete } = await withStoredImages(archives);
+      const { bytes, report } = await buildGedzip({ data, archives: complete, hideLiving: hideLivingOnExport });
+      const blob = new Blob([bytes as BlobPart], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `genealogor_export_${new Date().toISOString().split('T')[0]}.gdz`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      const skipped = report.skipped.length
+        ? ` ${report.skipped.length} document(s) sans fichier sur cet appareil non inclus (${report.skipped.slice(0, 3).map(d => `« ${d.title} »`).join(', ')}${report.skipped.length > 3 ? '…' : ''}).`
+        : '';
+      setStatusMessage(
+        `GEDZIP (GEDCOM 7) exporté : ${report.individuals} individus, ${report.mediaFiles} fichier(s), ${report.photoTags} personne(s) identifiée(s) sur les photos${report.maskedLiving ? `, ${report.maskedLiving} vivant(s) masqué(s)` : ''}.${skipped}`
+      );
+    } catch (e: any) {
+      setGedzipError('Export GEDZIP impossible : ' + (e?.message || 'échec technique.'));
+    } finally {
+      setGedzipBusy(null);
+    }
+  };
+
+  const handleGedzipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !onLoadGedzip) return;
+    setGedzipBusy('import');
+    setGedzipError(null);
+    try {
+      const { data: newData, archives: newArchives, report } = await readGedzip(new Uint8Array(await file.arrayBuffer()));
+      if (report.individuals === 0) throw new Error('aucun individu trouvé dans « gedcom.ged ».');
+      const missing = report.missingFiles.length ? `\n${report.missingFiles.length} fichier(s) référencé(s) mais absent(s) de l'archive.` : '';
+      const ok = confirm(
+        `Importer « ${file.name} » ?\n\n${report.individuals} individus, ${report.families} familles, ${report.documents} documents ` +
+        `dont ${report.mediaFiles} fichier(s), ${report.photoTags} personne(s) identifiée(s) sur les photos.${missing}\n\n` +
+        `L'arbre et les documents actuels seront remplacés. Une copie de secours permet d'annuler (« Annuler dernière restauration »).`
+      );
+      if (!ok) return;
+      await savePreRestoreSafety(data, archives, accessList);
+      await onLoadGedzip(newData, newArchives);
+      setStatusMessage(`GEDZIP importé : ${report.individuals} individus, ${report.mediaFiles} fichier(s), ${report.photoTags} personne(s) identifiée(s).`);
+      onClose();
+    } catch (err: any) {
+      setGedzipError('Import GEDZIP impossible : ' + (err?.message || 'fichier illisible.'));
+    } finally {
+      setGedzipBusy(null);
+    }
   };
 
   return (
@@ -339,6 +425,18 @@ export const ExportImportModal: React.FC<ExportImportModalProps> = ({
                     <span className="text-stone-400 block text-[10px]">Règles de branches</span>
                     <span className="font-bold font-mono">{backupPreview.manifest.stats.accessRulesCount}</span>
                   </div>
+                  {backupPreview.manifest.stats.filesCount !== undefined && (
+                    <>
+                      <div className="p-2 bg-stone-50 rounded">
+                        <span className="text-stone-400 block text-[10px]">Photos & actes numérisés (fichiers)</span>
+                        <span className="font-bold font-mono">{backupPreview.manifest.stats.filesCount}</span>
+                      </div>
+                      <div className="p-2 bg-stone-50 rounded">
+                        <span className="text-stone-400 block text-[10px]">Personnes identifiées sur les photos</span>
+                        <span className="font-bold font-mono">{backupPreview.manifest.stats.photoTagsCount ?? 0}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <p className="text-[11px] text-stone-500 italic">
@@ -412,6 +510,12 @@ export const ExportImportModal: React.FC<ExportImportModalProps> = ({
                   </button>
                 </div>
               </div>
+
+              <p className="text-[11px] text-stone-600 leading-relaxed">
+                Tout l'arbre est inclus : individus, familles, sources, <strong>photos et actes numérisés en pleine résolution</strong>,
+                <strong> personnes identifiées sur les photos</strong> (positions des repères), règles de partage, liens photo partagés
+                et journal des modifications. La restauration remet l'ensemble à l'identique.
+              </p>
 
               <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-stone-700 bg-stone-50 p-2.5 rounded-lg border border-stone-200/80">
                 <input
@@ -601,6 +705,48 @@ export const ExportImportModal: React.FC<ExportImportModalProps> = ({
                     />
                   </>
                 )}
+              </div>
+
+              {/* GEDCOM 7 avec médias (GEDZIP) */}
+              <div className="pt-3 mt-1 border-t border-stone-200/70 space-y-2">
+                <p className="text-[11px] text-stone-600 leading-relaxed">
+                  <strong>GEDCOM 7 avec médias (.gdz)</strong> : l'arbre, les photos et actes numérisés, et les personnes identifiées
+                  sur les photos (zones « CROP »), pour les logiciels compatibles GEDCOM 7. Genealogor le relit sans perte.
+                  Pour une copie de tout Genealogor (partages, journal…), préférez la sauvegarde complète ci-dessus.
+                </p>
+                {gedzipError && (
+                  <div className="p-2 bg-rose-100 border border-rose-300 rounded-lg text-rose-900 text-[11px] flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-700 shrink-0" />
+                    <span>{gedzipError}</span>
+                  </div>
+                )}
+                <div className={userRole === 'admin' && onLoadGedzip ? 'grid grid-cols-2 gap-2' : ''}>
+                  <button
+                    onClick={handleDownloadGedzip}
+                    disabled={gedzipBusy !== null}
+                    className="w-full py-2 px-3 text-xs font-semibold text-stone-800 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors border border-stone-200 cursor-pointer disabled:opacity-50"
+                  >
+                    {gedzipBusy === 'export' ? 'Préparation…' : 'Exporter en GEDZIP (.gdz)'}
+                  </button>
+                  {userRole === 'admin' && onLoadGedzip && (
+                    <>
+                      <button
+                        onClick={() => fileInputGedzipRef.current?.click()}
+                        disabled={gedzipBusy !== null}
+                        className="py-2 px-3 text-xs font-semibold text-stone-800 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors border border-stone-200 cursor-pointer disabled:opacity-50"
+                      >
+                        {gedzipBusy === 'import' ? 'Lecture…' : 'Importer un fichier .gdz'}
+                      </button>
+                      <input
+                        ref={fileInputGedzipRef}
+                        type="file"
+                        accept=".gdz,.zip"
+                        onChange={handleGedzipUpload}
+                        className="hidden"
+                      />
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 

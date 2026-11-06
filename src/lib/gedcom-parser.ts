@@ -233,6 +233,12 @@ export function parseGedcom(content: string): GenealogyData {
             }
             break;
           case 'OBJE': {
+            // Lien vers un enregistrement multimédia (`1 OBJE @O1@`, GEDCOM 7) : traité par l'import GEDZIP,
+            // ce n'est pas un média intégré
+            if (/^@[^@]+@$/.test(value.trim())) {
+              currentMedia = null;
+              break;
+            }
             if (!currentIndi.media) currentIndi.media = [];
             const m = { title: value || undefined };
             currentIndi.media.push(m);
@@ -335,6 +341,12 @@ export function parseGedcom(content: string): GenealogyData {
             }
             break;
           case 'OBJE': {
+            // Lien vers un enregistrement multimédia (`1 OBJE @O1@`, GEDCOM 7) : traité par l'import GEDZIP,
+            // ce n'est pas un média intégré
+            if (/^@[^@]+@$/.test(value.trim())) {
+              currentMedia = null;
+              break;
+            }
             if (!currentFam.media) currentFam.media = [];
             const m = { title: value || undefined };
             currentFam.media.push(m);

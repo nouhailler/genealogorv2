@@ -86,6 +86,7 @@ import {
   saveCloudArchiveIds,
 } from './lib/archive-persistence';
 import { requestPersistentStorage } from './lib/image-store';
+import type { BackupPayload } from './lib/backup-restore';
 import { filterGenealogyData } from './lib/branch-filter';
 import { realtimeClient, isJsonResponse, isTooLargeForRealtime } from './lib/realtime-client';
 import { verifyPassword } from './lib/crypto';
@@ -1125,15 +1126,42 @@ export default function App() {
     showToast('Nouvel arbre GEDCOM chargé et synchronisé.');
   };
 
-  const handleRestoreBackup = async (payload: { genealogy: GenealogyData; archives: ArchiveDocument[]; accessList: BranchAccess[] }) => {
+  // Import GEDZIP : remplace l'arbre et les documents (le nom de l'arbre est conservé), comme une restauration
+  const handleLoadGedzip = async (newData: GenealogyData, newArchives: ArchiveDocument[]) => {
+    const genealogy = data.sourceHeader ? { ...newData, sourceHeader: data.sourceHeader } : newData;
+    const tags = newArchives.reduce((n, a) => n + (a.photoTags?.length || 0), 0);
+    await handleRestoreBackup(
+      { genealogy, archives: newArchives, accessList },
+      `GEDZIP importé : ${Object.keys(newData.individuals).length} personnes, ${newArchives.length} documents, ${tags} personnes identifiées sur les photos.`
+    );
+  };
+
+  const handleRestoreBackup = async (payload: BackupPayload, successMessage?: string) => {
     if (userRole !== 'admin') {
       showToast("Action refusée : La restauration de sauvegarde est réservée au profil créateur.");
       return;
     }
 
+    const previousArchives = archivesRef.current;
+    // Les images de la copie de secours (sans fichiers) sont relues dans IndexedDB
+    triedImageIdsRef.current = new Set();
     setData(payload.genealogy);
     setArchives(payload.archives);
     setAccessList(payload.accessList);
+
+    // Compléments : liens photo partagés (fusionnés avec ceux de l'appareil) et journal des modifications
+    if (payload.extras?.photoShares?.length) {
+      setPhotoShareRecords(prev => {
+        let next = prev;
+        for (const record of payload.extras!.photoShares!) next = upsertPhotoShareRecord(next, record);
+        savePhotoShareRecords(roomId, next);
+        return next;
+      });
+    }
+    if (payload.extras?.changeLog) {
+      setChangeLog(payload.extras.changeLog);
+      setVersionedItem(changeLogKey(roomId), payload.extras.changeLog);
+    }
 
     setVersionedItem(`${STORAGE_KEYS.TREE}_${roomId}`, payload.genealogy);
     setVersionedItem(STORAGE_KEYS.TREE, payload.genealogy);
@@ -1159,7 +1187,22 @@ export default function App() {
       setIsCloudSynced(true);
     } catch (e) {}
 
-    showToast('Sauvegarde complète restaurée avec succès.');
+    // Cloud : la restauration remplace les archives. Les restaurées sont envoyées (et traitées comme
+    // jamais synchronisées, pour qu'une fusion ne les retire pas avant leur arrivée), les autres retirées.
+    const restoredIds = new Set(payload.archives.map(a => a.id));
+    const cloudIds = getCloudArchiveIds(roomId);
+    restoredIds.forEach(id => cloudIds.delete(id));
+    saveCloudArchiveIds(roomId, cloudIds);
+    if (currentUser) {
+      const removed = previousArchives.filter(a => !restoredIds.has(a.id));
+      await Promise.allSettled([
+        ...payload.archives.map(a => saveArchiveToFirestore(roomId, a, currentUser)),
+        ...removed.map(a => deleteArchiveFromFirestore(roomId, a.id, currentUser)),
+      ]);
+    }
+
+    const files = payload.archives.filter(a => a.fileData || a.imageStored).length;
+    showToast(successMessage || `Sauvegarde complète restaurée : ${Object.keys(payload.genealogy.individuals).length} personnes, ${payload.archives.length} documents dont ${files} fichiers.`);
   };
 
   const handleCreateNewPerson = () => {
@@ -1773,6 +1816,8 @@ export default function App() {
         userRole={userRole}
         onLoadGedcom={handleLoadGedcom}
         onRestoreBackup={handleRestoreBackup}
+        onLoadGedzip={handleLoadGedzip}
+        backupExtras={{ photoShares: photoShareRecords, changeLog }}
         onClearTree={handleClearTree}
       />
 
