@@ -3,6 +3,12 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.19.2] — 2026-11-06
+
+### 🔍 Ajouté — Recherche de personne dans « Rattacher manuellement »
+- Formulaire d'archive (création et modification) : un champ de recherche avec loupe, au-dessus de la liste des fiches à rattacher, filtre les personnes par nom (sans tenir compte des accents ni des majuscules). Plus besoin de faire défiler toute la liste.
+- Le nombre de personnes déjà rattachées s'affiche à côté du titre ; la touche Entrée dans le champ n'enregistre pas l'archive par erreur.
+
 ## [2.19.1] — 2026-10-29
 
 ### 🔗 Ajouté — Lien « À propos de Genealogor »

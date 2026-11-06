@@ -8,6 +8,7 @@ import {
 import { ArchiveDocument, ArchiveDocumentType, GenealogyData, Individual, PhotoTag } from '../../types/genealogy';
 import { parseRepublicanDate } from '../../lib/republican-calendar';
 import { PhotoTagger } from '../PhotoTagger';
+import { normalize } from '../../lib/place-gazetteer';
 
 interface ArchivesViewProps {
   archives: ArchiveDocument[];
@@ -69,6 +70,11 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
   const [formTranscription, setFormTranscription] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formLinkedPersons, setFormLinkedPersons] = useState<string[]>([]);
+  const [linkSearch, setLinkSearch] = useState('');
+  const linkSearchNorm = normalize(linkSearch);
+  const linkCandidates = Object.values(data.individuals).filter(
+    ind => !linkSearchNorm || normalize(ind.name).includes(linkSearchNorm)
+  );
   const [formFileData, setFormFileData] = useState<string | undefined>(undefined);
   const [formFileName, setFormFileName] = useState<string | undefined>(undefined);
 
@@ -111,6 +117,7 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
     setFormTranscription('');
     setFormNotes('');
     setFormLinkedPersons([]);
+    setLinkSearch('');
     setFormFileData(undefined);
     setFormFileName(undefined);
     setIsCreating(true);
@@ -127,6 +134,7 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
     setFormTranscription(doc.transcription || '');
     setFormNotes(doc.notes || '');
     setFormLinkedPersons(doc.linkedPersonIds || []);
+    setLinkSearch('');
     setFormFileData(doc.fileData);
     setFormFileName(doc.fileName);
     setIsEditing(true);
@@ -525,9 +533,41 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
               <div>
                 <label className="block text-xs font-medium text-stone-700 mb-1.5">
                   Rattacher manuellement aux fiches de l'arbre généalogique
+                  {formLinkedPersons.length > 0 && (
+                    <span className="ml-1.5 font-normal text-amber-800">
+                      ({formLinkedPersons.length} rattachée{formLinkedPersons.length > 1 ? 's' : ''})
+                    </span>
+                  )}
                 </label>
+                <div className="relative mb-1.5">
+                  <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={linkSearch}
+                    onChange={e => setLinkSearch(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}
+                    placeholder="Rechercher une personne…"
+                    aria-label="Rechercher une personne à rattacher"
+                    className="w-full text-xs bg-white border border-stone-200 rounded-lg py-2 pl-8 pr-8 text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-800"
+                  />
+                  {linkSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setLinkSearch('')}
+                      aria-label="Effacer la recherche"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-stone-400 hover:text-stone-700"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
                 <div className="border border-stone-200 rounded-lg p-2.5 max-h-40 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1.5 bg-stone-50/50">
-                  {Object.values(data.individuals).map(ind => {
+                  {linkCandidates.length === 0 && (
+                    <p className="col-span-full text-xs text-stone-500 italic p-1.5">
+                      Aucune personne ne correspond à « {linkSearch} ».
+                    </p>
+                  )}
+                  {linkCandidates.map(ind => {
                     const isLinked = formLinkedPersons.includes(ind.id);
                     return (
                       <button
