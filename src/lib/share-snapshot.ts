@@ -90,7 +90,8 @@ export function buildShareSnapshot(
     visibleArchives = sanitizeArchivesForPrivacy(visibleArchives, getProtectedPersonIds(data));
   }
 
-  const sharedArchives = visibleArchives.map(({ fileData, ...rest }) => rest);
+  // Sans les fichiers (trop volumineux) ni les noms proposés par des visiteurs, non vérifiés
+  const sharedArchives = visibleArchives.map(({ fileData, pendingIdentifications, ...rest }) => rest);
   return {
     version: SHARE_FORMAT_VERSION,
     title: data.sourceHeader || 'Arbre généalogique',

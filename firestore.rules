@@ -94,6 +94,32 @@ service cloud.firestore {
         && request.resource.data.payload is string
         && request.resource.data.payload.size() < 1000000;
       allow delete: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+
+      // Propositions d'identification envoyées depuis une photo partagée.
+      // Dépôt : toute personne qui détient le lien (le jeton est secret), contenu chiffré avec la clé du lien,
+      // taille et champs contrôlés. Lecture, réécriture (tri partiel) et suppression : créateur du lien.
+      function isShareOwner() {
+        return isSignedIn()
+          && get(/databases/$(database)/documents/shares/$(token)).data.ownerId == request.auth.uid;
+      }
+      match /proposals/{proposalId} {
+        allow create: if isValidId(token) && token.size() >= 20
+          && isValidId(proposalId) && proposalId.size() >= 16
+          && exists(/databases/$(database)/documents/shares/$(token))
+          && request.resource.data.keys().hasOnly(['payload', 'createdAt', 'count'])
+          && request.resource.data.payload is string
+          && request.resource.data.payload.size() > 0
+          && request.resource.data.payload.size() < 30000
+          && request.resource.data.count is int
+          && request.resource.data.count >= 1 && request.resource.data.count <= 20
+          && request.resource.data.createdAt == request.time;
+        allow read, delete: if isShareOwner();
+        allow update: if isShareOwner()
+          && request.resource.data.keys().hasOnly(['payload', 'createdAt', 'count'])
+          && request.resource.data.payload is string
+          && request.resource.data.payload.size() < 30000
+          && request.resource.data.createdAt == resource.data.createdAt;
+      }
     }
 
     // Family trees collection

@@ -3,6 +3,17 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.22.0] — 2026-11-06
+
+### 🙋 Ajouté — Propositions d'identification sur les photos partagées
+- **Visiteur** (page d'une photo partagée, sans compte) : bouton « Proposer une identification », clic sur un visage, « Qui est-ce ? » en texte libre et précision facultative ; propositions en pointillés, modifiables ; récapitulatif avec prénom et commentaire facultatifs, puis « Envoyer à l'administrateur ». Jusqu'à 20 propositions par envoi.
+- **Confidentialité** : chaque envoi est chiffré avec la clé du lien et déposé dans Firestore sous `/shares/<jeton>/proposals` ; seul le créateur du lien peut le lire, le réécrire ou le supprimer. Les noms proposés ne sont jamais publiés dans les liens d'arbre.
+- **Administrateur** (Archives & Actes) : badge « N proposition(s) à examiner », notification à l'ouverture et à chaque nouvel envoi ; panneau d'examen avec les propositions placées sur la photo. Pour chacune : associer à une personne de l'arbre (suggestions d'après le nom proposé, recherche), « À créer plus tard » ou « Refuser ».
+- **Une proposition ne crée jamais de personne** : « À créer plus tard » la range dans « Personnes à créer » sur la photo ; une fois la fiche créée par l'administrateur, un clic l'associe et place le repère.
+- Après validation, « Mettre à jour le lien partagé » rend les repères visibles aux visiteurs. La révocation d'un lien supprime aussi ses propositions.
+- **Règles Firestore modifiées : à déployer** (`npx firebase-tools deploy --only firestore:rules`).
+- Tests `photo-proposals.test.ts` (nettoyage, chiffrement, limites alignées sur les règles, suggestions) ; parcours visiteur et examen vérifiés dans le navigateur.
+
 ## [2.21.0] — 2026-11-06
 
 ### ⛪ Ajouté — Églises et cimetières sur la carte

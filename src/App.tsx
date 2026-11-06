@@ -55,6 +55,7 @@ import {
   upsertPhotoShareRecord,
 } from './lib/photo-share';
 import { SharedPhotoView } from './components/SharedPhotoView';
+import { sealSubmission, openSubmission, flattenSubmission, withoutItems, newProposalId, ReceivedProposalItem } from './lib/photo-proposals';
 import { FanChartView } from './components/views/FanChartView';
 import { DescendantsView } from './components/views/DescendantsView';
 import { ImplexView } from './components/views/ImplexView';
@@ -132,6 +133,11 @@ import {
   clearTreeFromFirestore,
   publishShareToFirestore,
   deleteShareFromFirestore,
+  submitPhotoProposal,
+  subscribeToPhotoProposals,
+  rewritePhotoProposal,
+  deletePhotoProposal,
+  deleteAllPhotoProposals,
   subscribeToShare
 } from './lib/firestore-sync';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -247,6 +253,11 @@ export default function App() {
   useEffect(() => {
     setPhotoShareRecords(getPhotoShareRecords(roomId));
   }, [roomId]);
+
+  // Propositions d'identification déposées par les visiteurs des liens photo (déchiffrées avec la clé du lien)
+  type OpenedProposal = { docId: string; createdAt?: number; submission: import('./lib/photo-proposals').ProposalSubmission };
+  const [proposalDocs, setProposalDocs] = useState<Record<string, OpenedProposal[]>>({});
+  const proposalTokensKey = photoShareRecords.map(r => r.token).sort().join(',');
 
   const [accessList, setAccessList] = useState<BranchAccess[]>(() => {
     const res = getVersionedItem<BranchAccess[]>(`${STORAGE_KEYS.ACCESS}_${roomId}`, []);
@@ -1038,6 +1049,118 @@ export default function App() {
     showToast('Acte supprimé du fonds d\'archives.');
   };
 
+  useEffect(() => {
+    if (isSharedView || !currentUser || userRole !== 'admin' || photoShareRecords.length === 0) {
+      setProposalDocs({});
+      return;
+    }
+    const unsubs = photoShareRecords.map(record =>
+      subscribeToPhotoProposals(
+        record.token,
+        async list => {
+          const opened = await Promise.all(list.map(async (d): Promise<OpenedProposal | null> => {
+            try {
+              return { docId: d.id, createdAt: d.createdAt, submission: await openSubmission(d.payload, record.key) };
+            } catch {
+              // Indéchiffrable avec la clé du lien : dépôt invalide, supprimé
+              deletePhotoProposal(record.token, d.id).catch(() => {});
+              return null;
+            }
+          }));
+          setProposalDocs(prev => ({ ...prev, [record.token]: opened.filter((o): o is OpenedProposal => o !== null && o.submission.items.length > 0) }));
+        },
+        e => console.warn('Lecture des propositions impossible (règles Firestore déployées ?) :', e)
+      )
+    );
+    return () => unsubs.forEach(u => u());
+  }, [isSharedView, currentUser, userRole, proposalTokensKey]);
+
+  const proposalsByArchive = useMemo(() => {
+    const byArchive: Record<string, ReceivedProposalItem[]> = {};
+    for (const record of photoShareRecords) {
+      for (const d of proposalDocs[record.token] || []) {
+        (byArchive[record.archiveId] ||= []).push(...flattenSubmission(record.token, d.docId, d.submission, d.createdAt));
+      }
+    }
+    for (const list of Object.values(byArchive)) list.sort((a, b) => (a.submittedAt || 0) - (b.submittedAt || 0));
+    return byArchive;
+  }, [proposalDocs, photoShareRecords]);
+
+  // Signalement à l'ouverture et à chaque nouvel envoi
+  const proposalTotal = Object.values(proposalsByArchive).reduce((n, l) => n + l.length, 0);
+  const lastProposalTotalRef = React.useRef(0);
+  useEffect(() => {
+    if (proposalTotal > lastProposalTotalRef.current) {
+      showToast(`${proposalTotal} proposition(s) d'identification à examiner (Archives & Actes).`);
+    }
+    lastProposalTotalRef.current = proposalTotal;
+  }, [proposalTotal]);
+
+  /** Retire une proposition traitée de son envoi (réécrit chiffré, ou supprimé s'il n'en reste plus) */
+  const removeProposalItem = async (item: ReceivedProposalItem) => {
+    const record = photoShareRecords.find(r => r.token === item.token);
+    const opened = (proposalDocs[item.token] || []).find(d => d.docId === item.docId);
+    if (!record || !opened) return;
+    const rest = withoutItems(opened.submission, [item.index]);
+    try {
+      if (!rest) await deletePhotoProposal(item.token, item.docId);
+      else {
+        const { payload, count } = await sealSubmission(rest, record.key);
+        await rewritePhotoProposal(item.token, item.docId, payload, count);
+      }
+    } catch (e) {
+      console.warn('Mise à jour de la proposition impossible :', e);
+      throw new Error('La proposition a été traitée mais n\'a pas pu être retirée de la liste (connexion ?).');
+    }
+  };
+
+  const handleResolveProposal = async (
+    archive: ArchiveDocument,
+    item: ReceivedProposalItem,
+    resolution: import('./components/ProposalReviewPanel').ProposalResolution
+  ) => {
+    if (resolution.type === 'accept') {
+      const tag = {
+        id: `tag-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        personId: resolution.personId,
+        x: item.x,
+        y: item.y,
+        ...(item.details ? { label: item.details } : {}),
+        createdAt: Date.now(),
+      };
+      await handleUpdateArchive({ ...archive, photoTags: [...(archive.photoTags || []), tag], updatedAt: Date.now() });
+    } else if (resolution.type === 'later') {
+      const pendingItem = {
+        id: `pid-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        x: item.x,
+        y: item.y,
+        name: item.name,
+        ...(item.details ? { details: item.details } : {}),
+        ...(item.proposer ? { proposer: item.proposer } : {}),
+        receivedAt: item.submittedAt || Date.now(),
+      };
+      await handleUpdateArchive({ ...archive, pendingIdentifications: [...(archive.pendingIdentifications || []), pendingItem], updatedAt: Date.now() });
+    }
+    await removeProposalItem(item);
+  };
+
+  const handleResolvePendingIdentification = async (archive: ArchiveDocument, pendingId: string, personId: string | null) => {
+    const pendingItem = (archive.pendingIdentifications || []).find(p => p.id === pendingId);
+    if (!pendingItem) return;
+    const remaining = (archive.pendingIdentifications || []).filter(p => p.id !== pendingId);
+    const photoTags = personId
+      ? [...(archive.photoTags || []), {
+          id: `tag-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          personId,
+          x: pendingItem.x,
+          y: pendingItem.y,
+          ...(pendingItem.details ? { label: pendingItem.details } : {}),
+          createdAt: Date.now(),
+        }]
+      : archive.photoTags;
+    await handleUpdateArchive({ ...archive, photoTags, pendingIdentifications: remaining, updatedAt: Date.now() });
+  };
+
   const handlePublishPhotoShare = async (
     archive: ArchiveDocument,
     hideLiving: boolean,
@@ -1075,6 +1198,8 @@ export default function App() {
     // Sans session, la suppression Firestore serait ignorée et le lien resterait actif
     if (!currentUser) throw new Error('Connexion Google requise pour révoquer un lien de partage.');
     try {
+      // Propositions d'abord : les règles vérifient le propriétaire à partir du lien, qui doit encore exister
+      await deleteAllPhotoProposals(record.token).catch(e => console.warn('Suppression des propositions impossible :', e));
       await deleteShareFromFirestore(record.token, currentUser);
     } catch (e) {
       console.warn('Révocation du lien photo impossible :', e);
@@ -1453,7 +1578,21 @@ export default function App() {
       );
     }
     if (sharedView.status === 'photo') {
-      return <SharedPhotoView snapshot={sharedView.snapshot} />;
+      return (
+        <SharedPhotoView
+          snapshot={sharedView.snapshot}
+          onSubmitProposals={async submission => {
+            // Chiffré avec la clé du lien : seul le créateur du lien pourra le lire
+            const { payload, count } = await sealSubmission(submission, sharedKeyRef.current);
+            try {
+              await submitPhotoProposal(SHARE_PARAMS!.token, newProposalId(), payload, count);
+            } catch (e) {
+              console.warn('Envoi des propositions refusé :', e);
+              throw new Error('Envoi impossible pour le moment (lien révoqué ou service indisponible). Réessayez plus tard.');
+            }
+          }}
+        />
+      );
     }
     if (sharedView.status !== 'ready') {
       return <SharedLinkStatus status={sharedView.status} message={'message' in sharedView ? sharedView.message : undefined} />;
@@ -1691,6 +1830,11 @@ export default function App() {
             onAddArchive={userRole === 'admin' ? handleAddArchive : undefined}
             onUpdateArchive={userRole === 'admin' ? handleUpdateArchive : undefined}
             onDeleteArchive={userRole === 'admin' ? handleDeleteArchive : undefined}
+            proposals={userRole === 'admin' && !isSharedView ? {
+              byArchive: proposalsByArchive,
+              onResolve: handleResolveProposal,
+              onResolvePending: handleResolvePendingIdentification,
+            } : undefined}
             photoShare={userRole === 'admin' && !isSharedView ? {
               records: photoShareRecords,
               onPublish: handlePublishPhotoShare,

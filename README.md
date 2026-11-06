@@ -284,7 +284,8 @@ Sur une archive contenant une image, le créateur connecté avec Google clique s
 - **Instantané** : le lien montre la photo telle qu'au moment de la publication. Après avoir ajouté des étiquettes, rouvrir **Partager cette photo** → **Mettre à jour** (le lien ne change pas).
 - **Révocation** : bouton **Révoquer**, ou suppression de l'archive.
 - **Limite** : les liens photo sont mémorisés sur l'appareil qui les a créés (la clé n'est jamais publiée) ; leur mise à jour et leur révocation se font depuis cet appareil.
-- Aucun changement des règles Firestore n'est nécessaire.
+- **Propositions d'identification** : sur la page de la photo, le visiteur peut cliquer **Proposer une identification**, placer des repères sur les visages qu'il reconnaît (nom en texte libre, précision facultative), vérifier son récapitulatif puis **Envoyer à l'administrateur**. L'envoi est chiffré avec la clé du lien et déposé dans Firestore (`/shares/<jeton>/proposals`) ; seul le créateur du lien peut le lire. Dans **Archives & Actes**, la photo affiche « N proposition(s) à examiner » : pour chacune, **associer** à une personne de l'arbre (suggestions d'après le nom), **À créer plus tard** (une proposition ne crée jamais de personne : elle rejoint la liste « Personnes à créer », à associer une fois la fiche créée) ou **Refuser**. Après validation, **Mettre à jour le lien partagé** rend les nouveaux repères visibles.
+- Les propositions nécessitent les règles Firestore à jour (voir ci-dessous) ; elles ne se lisent que sur l'appareil qui a créé le lien ; aucune notification par e-mail (pas de serveur sur l'hébergement statique).
 
 #### Déployer les règles Firestore (obligatoire une fois)
 

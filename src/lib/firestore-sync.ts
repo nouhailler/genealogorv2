@@ -7,7 +7,10 @@ import {
   getDocs,
   query,
   where,
-  deleteField
+  deleteField,
+  serverTimestamp,
+  Timestamp,
+  updateDoc
 } from 'firebase/firestore';
 import { db, OperationType, handleFirestoreError } from './firebase';
 import { prepareArchiveForFirestore } from './archive-persistence';
@@ -343,3 +346,58 @@ export async function listUserTreesFromFirestore(
   }
 }
 
+
+
+// --- Propositions d'identification sur une photo partagée (/shares/{jeton}/proposals) ---
+
+/** Dépose un envoi chiffré (visiteur du lien, sans compte) */
+export async function submitPhotoProposal(token: string, proposalId: string, payload: string, count: number): Promise<void> {
+  await setDoc(doc(db, 'shares', token, 'proposals', proposalId), {
+    payload,
+    count,
+    createdAt: serverTimestamp(),
+  });
+}
+
+export interface StoredProposal {
+  id: string;
+  payload: string;
+  count: number;
+  createdAt?: number;
+}
+
+/** Suit les envois reçus pour un lien (créateur du lien uniquement) */
+export function subscribeToPhotoProposals(
+  token: string,
+  onUpdate: (proposals: StoredProposal[]) => void,
+  onError: (error: unknown) => void
+): () => void {
+  return onSnapshot(
+    collection(db, 'shares', token, 'proposals'),
+    snap => {
+      const list: StoredProposal[] = [];
+      snap.forEach(d => {
+        const data = d.data() as { payload: string; count: number; createdAt?: Timestamp };
+        list.push({ id: d.id, payload: data.payload, count: data.count, createdAt: data.createdAt?.toMillis?.() });
+      });
+      onUpdate(list);
+    },
+    onError
+  );
+}
+
+/** Réécrit un envoi après traitement d'une partie de ses propositions */
+export async function rewritePhotoProposal(token: string, proposalId: string, payload: string, count: number): Promise<void> {
+  // createdAt n'est pas réécrit : les règles exigent qu'il reste identique
+  await updateDoc(doc(db, 'shares', token, 'proposals', proposalId), { payload, count });
+}
+
+export async function deletePhotoProposal(token: string, proposalId: string): Promise<void> {
+  await deleteDoc(doc(db, 'shares', token, 'proposals', proposalId));
+}
+
+/** Supprime tous les envois d'un lien (révocation : Firestore ne supprime pas les sous-collections) */
+export async function deleteAllPhotoProposals(token: string): Promise<void> {
+  const snap = await getDocs(collection(db, 'shares', token, 'proposals'));
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+}

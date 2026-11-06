@@ -10,6 +10,8 @@ import { parseRepublicanDate } from '../../lib/republican-calendar';
 import { PhotoTagger } from '../PhotoTagger';
 import { normalize } from '../../lib/place-gazetteer';
 import { PhotoShareModal, PhotoShareControls } from '../PhotoShareModal';
+import { ProposalReviewPanel, ProposalResolution } from '../ProposalReviewPanel';
+import { ReceivedProposalItem } from '../../lib/photo-proposals';
 import { isShareableImage } from '../../lib/photo-share';
 
 interface ArchivesViewProps {
@@ -22,6 +24,12 @@ interface ArchivesViewProps {
   onSelectPerson: (personId: string) => void;
   /** Partage d'une photo étiquetée par lien (créateur uniquement) */
   photoShare?: PhotoShareControls;
+  /** Propositions d'identification reçues des visiteurs des liens photo (créateur uniquement) */
+  proposals?: {
+    byArchive: Record<string, ReceivedProposalItem[]>;
+    onResolve: (archive: ArchiveDocument, item: ReceivedProposalItem, resolution: ProposalResolution) => Promise<void>;
+    onResolvePending: (archive: ArchiveDocument, pendingId: string, personId: string | null) => Promise<void>;
+  };
 }
 
 const TYPE_LABELS: Record<ArchiveDocumentType, { label: string; color: string }> = {
@@ -47,8 +55,12 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
   onDeleteArchive,
   onSelectPerson,
   photoShare,
+  proposals,
 }) => {
   const [isPhotoShareOpen, setIsPhotoShareOpen] = useState(false);
+  // Photos dont des propositions ont été traitées : le panneau reste affiché pour proposer de mettre à jour le lien
+  const [reviewedArchiveIds, setReviewedArchiveIds] = useState<Set<string>>(new Set());
+  const markReviewed = (id: string) => setReviewedArchiveIds(prev => (prev.has(id) ? prev : new Set(prev).add(id)));
   const [selectedDocId, setSelectedDocId] = useState<string>(selectedArchiveId || archives[0]?.id || '');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -369,6 +381,15 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
                       )}
                     </div>
 
+                    {/* Propositions d'identification en attente */}
+                    {proposals && ((proposals.byArchive[doc.id]?.length || 0) + (doc.pendingIdentifications?.length || 0)) > 0 && (
+                      <div className="mt-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[10px] font-semibold">
+                        {(proposals.byArchive[doc.id]?.length || 0) > 0 && <span>{proposals.byArchive[doc.id].length} proposition(s) à examiner</span>}
+                        {(proposals.byArchive[doc.id]?.length || 0) > 0 && (doc.pendingIdentifications?.length || 0) > 0 && <span>·</span>}
+                        {(doc.pendingIdentifications?.length || 0) > 0 && <span>{doc.pendingIdentifications!.length} à créer</span>}
+                      </div>
+                    )}
+
                     {/* Linked persons indicators */}
                     {doc.linkedPersonIds && doc.linkedPersonIds.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-stone-100 flex items-center gap-1 text-[11px] text-stone-600">
@@ -670,6 +691,26 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
                   archive={selectedDoc}
                   onClose={() => setIsPhotoShareOpen(false)}
                 />
+              )}
+
+              {/* Propositions d'identification reçues pour cette photo (liens partagés) */}
+              {proposals && ((proposals.byArchive[selectedDoc.id]?.length || 0) > 0 || (selectedDoc.pendingIdentifications?.length || 0) > 0 || reviewedArchiveIds.has(selectedDoc.id)) && (
+                <div className="px-6">
+                  <ProposalReviewPanel
+                    key={selectedDoc.id}
+                    archive={selectedDoc}
+                    data={data}
+                    proposals={proposals.byArchive[selectedDoc.id] || []}
+                    onResolve={(item, resolution) => { markReviewed(selectedDoc.id); return proposals.onResolve(selectedDoc, item, resolution); }}
+                    onResolvePending={(pendingId, personId) => { markReviewed(selectedDoc.id); return proposals.onResolvePending(selectedDoc, pendingId, personId); }}
+                    onRepublish={photoShare?.records.find(r => r.archiveId === selectedDoc.id)
+                      ? async () => {
+                          const record = photoShare.records.find(r => r.archiveId === selectedDoc.id)!;
+                          await photoShare.onPublish(selectedDoc, record.hideLiving, record);
+                        }
+                      : undefined}
+                  />
+                </div>
               )}
 
               {/* High-Definition Visualizer Container with Photo Tagging */}

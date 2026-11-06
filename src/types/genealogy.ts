@@ -112,6 +112,18 @@ export interface PhotoTag {
   createdAt?: number;
 }
 
+/** Proposition d'un visiteur mise de côté : la personne doit d'abord être créée dans l'arbre */
+export interface PendingIdentification {
+  id: string;
+  x: number;
+  y: number;
+  /** Nom proposé (texte libre) */
+  name: string;
+  details?: string;
+  proposer?: string;
+  receivedAt: number;
+}
+
 export interface ArchiveDocument {
   id: string;
   title: string;
@@ -133,6 +145,8 @@ export interface ArchiveDocument {
   photoTags?: PhotoTag[];    // Tags interactifs placés sur l'image
   /** Image conservée localement dans IndexedDB (le localStorage n'en garde que les métadonnées) */
   imageStored?: boolean;
+  /** Identifications proposées par des visiteurs, gardées « à créer plus tard » par l'administrateur */
+  pendingIdentifications?: PendingIdentification[];
   createdAt: number;
   updatedAt: number;
 }
