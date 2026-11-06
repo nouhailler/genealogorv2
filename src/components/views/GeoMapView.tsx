@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { MapPin, Search, Compass, Route, ChevronRight, ChevronDown, ChevronUp, Loader2, Baby, Heart, Cross, X, Droplets, Landmark, Home } from 'lucide-react';
+import { MapPin, Search, Compass, Route, ChevronRight, ChevronDown, ChevronUp, Loader2, Baby, Heart, Cross, X, Droplets, Landmark, Home, Church } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { GenealogyData } from '../../types/genealogy';
@@ -10,6 +10,7 @@ import {
   parsePlace,
   GeoCoordinates,
 } from '../../lib/france-geocoding';
+import { loadHeritagePlaces, HeritagePlace, heritageKindLabel, denominationLabel } from '../../lib/heritage-places';
 
 interface GeoMapViewProps {
   data: GenealogyData;
@@ -132,6 +133,28 @@ const siteKey = (c: GeoCoordinates) =>
 
 const GEOCODING_CONCURRENCY = 6;
 
+/** Églises et cimetières : affichés à partir de l'échelle d'une commune */
+const HERITAGE_MIN_ZOOM = 13;
+const HERITAGE_ATTRIBUTION = 'Églises et cimetières &copy; contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+
+const CHURCH_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 3v18M6 9h12"/></svg>';
+const CEMETERY_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M7 21V10a5 5 0 0 1 10 0v11z"/><rect x="4" y="19.5" width="16" height="2.5" rx="1"/></svg>';
+
+function heritageIcon(place: HeritagePlace): L.DivIcon {
+  const isCemetery = place.kind === 'cemetery';
+  const style = isCemetery
+    ? 'background:#f5f5f4;color:#44403c;border-color:#57534e'
+    : 'background:#eef2ff;color:#3730a3;border-color:#4338ca';
+  const size = place.kind === 'chapel' ? 18 : 22;
+  return L.divIcon({
+    className: '',
+    html: `<span style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:9999px;border:1.5px solid;box-shadow:0 1px 3px rgba(0,0,0,.35);${style}">${isCemetery ? CEMETERY_SVG : CHURCH_SVG}</span>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
+  });
+}
+
 /**
  * Personnes d'une commune, affichées sur la carte : les 5 plus récentes d'abord,
  * les autres dans une liste déroulante.
@@ -213,6 +236,9 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showMigrations, setShowMigrations] = useState(false);
+  const [showHeritage, setShowHeritage] = useState(true);
+  const [heritageStatus, setHeritageStatus] = useState<{ state: 'idle' | 'zoom' | 'loading' | 'ready' | 'error'; count?: number; message?: string }>({ state: 'idle' });
+  const heritageLayerRef = useRef<L.LayerGroup | null>(null);
   /** Coordonnées par lieu brut ; null = recherché sans succès */
   const [geocoded, setGeocoded] = useState<Record<string, GeoCoordinates | null>>({});
 
@@ -328,6 +354,7 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
     L.control.zoom({ position: 'topright' }).addTo(map);
     markersLayerRef.current = L.layerGroup().addTo(map);
     migrationLayerRef.current = L.layerGroup().addTo(map);
+    heritageLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     return () => {
       map.remove();
@@ -419,6 +446,65 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
       }
     }
   }, [showMigrations, geocoded, data]);
+
+  // 7. Églises, chapelles et cimetières (OpenStreetMap), à partir de l'échelle d'une commune
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = heritageLayerRef.current;
+    if (!map || !layer) return;
+    let request = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    if (showHeritage) map.attributionControl.addAttribution(HERITAGE_ATTRIBUTION);
+
+    const refresh = () => {
+      const id = ++request;
+      if (!showHeritage) {
+        layer.clearLayers();
+        setHeritageStatus({ state: 'idle' });
+        return;
+      }
+      if (map.getZoom() < HERITAGE_MIN_ZOOM) {
+        layer.clearLayers();
+        setHeritageStatus({ state: 'zoom' });
+        return;
+      }
+      const b = map.getBounds();
+      setHeritageStatus({ state: 'loading' });
+      loadHeritagePlaces({ south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() })
+        .then(places => {
+          if (id !== request) return; // la carte a bougé depuis
+          layer.clearLayers();
+          for (const place of places) {
+            const label = heritageKindLabel(place.kind);
+            const denom = denominationLabel(place.denomination);
+            L.marker([place.lat, place.lng], { icon: heritageIcon(place), keyboard: false, title: place.name || label })
+              .bindPopup(
+                `<strong>${escapeHtml(place.name || label)}</strong><br>` +
+                `<span style="color:#57534e">${label}${denom ? ` ${escapeHtml(denom)}` : ''}</span><br>` +
+                `<a href="${place.osmUrl}" target="_blank" rel="noopener noreferrer">Voir sur OpenStreetMap</a>`
+              )
+              .addTo(layer);
+          }
+          setHeritageStatus({ state: 'ready', count: places.length });
+        })
+        .catch((e: Error) => {
+          if (id === request) setHeritageStatus({ state: 'error', message: e.message });
+        });
+    };
+    // Délai après un déplacement : une seule requête quand on a fini de bouger la carte
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(refresh, 600);
+    };
+    refresh();
+    map.on('moveend', schedule);
+    return () => {
+      request++;
+      if (timer) clearTimeout(timer);
+      map.off('moveend', schedule);
+      map.attributionControl.removeAttribution(HERITAGE_ATTRIBUTION);
+    };
+  }, [showHeritage]);
 
   const handleSelectFromList = (site: Site) => {
     setSelectedKey(site.key);
@@ -518,6 +604,33 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
                 <Route className="w-3 h-3 text-amber-800" />
                 <span>Migrations père → enfant</span>
               </label>
+              <label className="flex items-center gap-1.5 bg-white/95 px-2 py-1 rounded-lg border border-stone-200 shadow-sm text-stone-700 cursor-pointer select-none">
+                <input type="checkbox" checked={showHeritage} onChange={e => setShowHeritage(e.target.checked)} className="h-3 w-3" />
+                <Church className="w-3 h-3 text-indigo-700" />
+                <span>Églises & cimetières</span>
+              </label>
+              {showHeritage && heritageStatus.state === 'zoom' && (
+                <button
+                  type="button"
+                  onClick={() => mapRef.current?.setZoom(HERITAGE_MIN_ZOOM)}
+                  className="text-left bg-white/95 px-2 py-1 rounded-lg border border-stone-200 shadow-sm text-stone-600 hover:text-stone-900 cursor-pointer"
+                >
+                  Zoomez pour les voir →
+                </button>
+              )}
+              {showHeritage && heritageStatus.state === 'loading' && (
+                <span className="flex items-center gap-1.5 bg-white/95 px-2 py-1 rounded-lg border border-stone-200 shadow-sm text-stone-600" role="status">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Recherche des églises et cimetières…
+                </span>
+              )}
+              {showHeritage && heritageStatus.state === 'ready' && heritageStatus.count === 0 && (
+                <span className="bg-white/95 px-2 py-1 rounded-lg border border-stone-200 shadow-sm text-stone-600">Aucune église ni cimetière ici</span>
+              )}
+              {showHeritage && heritageStatus.state === 'error' && (
+                <span className="max-w-[16rem] bg-rose-50 px-2 py-1 rounded-lg border border-rose-200 shadow-sm text-rose-800" role="alert">
+                  {heritageStatus.message}
+                </span>
+              )}
             </div>
 
             {/* Légende */}
@@ -526,6 +639,15 @@ export const GeoMapView: React.FC<GeoMapViewProps> = ({ data, onSelectPerson }) 
               <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-800/70" />
               <span className="inline-block w-4 h-4 rounded-full bg-amber-800/70" />
               <span>Taille = nombre d'événements</span>
+              {showHeritage && heritageStatus.state === 'ready' && (heritageStatus.count ?? 0) > 0 && (
+                <>
+                  <span className="w-px h-3 bg-stone-300" />
+                  <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-indigo-700 bg-indigo-50 text-indigo-800"><Church className="w-2.5 h-2.5" /></span>
+                  <span>Église</span>
+                  <span className="inline-block w-3.5 h-3.5 rounded-full border border-stone-600 bg-stone-100" />
+                  <span>Cimetière</span>
+                </>
+              )}
             </div>
 
             {/* Commune sélectionnée : ses habitants (naissance, mariage, décès, autres événements) */}

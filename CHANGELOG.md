@@ -3,6 +3,15 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.21.0] — 2026-11-06
+
+### ⛪ Ajouté — Églises et cimetières sur la carte
+- Carte : quand on zoome à l'échelle d'une commune, les **églises, chapelles et cimetières** apparaissent (croix bleue pour les lieux de culte, stèle grise pour les cimetières). Un clic ouvre leur nom, leur confession et un lien vers OpenStreetMap.
+- Case « Églises & cimetières » (activée par défaut) ; en vue éloignée, un bouton « Zoomez pour les voir → » amène directement à la bonne échelle. Indicateur pendant la recherche, message clair si le service ne répond pas.
+- Données OpenStreetMap via l'API publique Overpass (sans clé ni compte) ; seule la zone affichée est envoyée. Le service pouvant mettre une trentaine de secondes à répondre quand il est chargé, les zones déjà vues sont gardées 30 jours sur l'appareil et s'affichent ensuite aussitôt.
+- Pour la suite : module `src/lib/heritage-places.ts` avec `findNearby(lat, lng)` (lieux les plus proches, triés par distance, filtrables par type), prévu pour proposer le cimetière d'une inhumation ou l'église d'un baptême.
+- Tests `heritage-places.test.ts` ; vérifié dans l'application autour de Saint-Pierre-de-Frugie (églises Saint-Projet, Saint-Pierre-et-Saint-Paul, Saint-Joseph ; vieux et nouveau cimetières).
+
 ## [2.20.4] — 2026-11-06
 
 ### 🏷️ Modifié — Le nom d'une personne identifiée ne cache plus son visage

@@ -50,6 +50,7 @@ Accessible depuis le coin supérieur gauche de la barre de navigation, le tiroir
    - Studio d'Archives & Déchiffrage Paléographique
    - Frise Historique & Repères chronologiques de France
    - Carte des Migrations & Lieux de vie
+   - Églises, chapelles et cimetières affichés sur la carte à partir de l'échelle d'une commune (données OpenStreetMap via l'API Overpass, sans clé ; cache local de 30 jours). Module réutilisable `src/lib/heritage-places.ts` (`findNearby` : lieux de culte et cimetières les plus proches d'un point).
    - Statistiques Démographiques & Détection de Doublons
 - **2. 🤝 Partage & Collaboration** :
    - Partager une branche via lien privé avec mot de passe
