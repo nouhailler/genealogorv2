@@ -11,7 +11,7 @@ import { PhotoTagger } from '../PhotoTagger';
 import { normalize } from '../../lib/place-gazetteer';
 import { PhotoShareModal, PhotoShareControls } from '../PhotoShareModal';
 import { ProposalReviewPanel, ProposalResolution } from '../ProposalReviewPanel';
-import { ReceivedProposalItem } from '../../lib/photo-proposals';
+import { ReceivedProposalItem, ReceivedDateProposal } from '../../lib/photo-proposals';
 import { isShareableImage } from '../../lib/photo-share';
 
 interface ArchivesViewProps {
@@ -27,6 +27,8 @@ interface ArchivesViewProps {
   /** Propositions d'identification reçues des visiteurs des liens photo (créateur uniquement) */
   proposals?: {
     byArchive: Record<string, ReceivedProposalItem[]>;
+    datesByArchive: Record<string, ReceivedDateProposal[]>;
+    onResolveDate: (archive: ArchiveDocument, proposal: ReceivedDateProposal, apply: boolean) => Promise<void>;
     onResolve: (archive: ArchiveDocument, item: ReceivedProposalItem, resolution: ProposalResolution) => Promise<void>;
     onResolvePending: (archive: ArchiveDocument, pendingId: string, personId: string | null) => Promise<void>;
   };
@@ -382,13 +384,16 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
                     </div>
 
                     {/* Propositions d'identification en attente */}
-                    {proposals && ((proposals.byArchive[doc.id]?.length || 0) + (doc.pendingIdentifications?.length || 0)) > 0 && (
+                    {proposals && ((proposals.byArchive[doc.id]?.length || 0) + (proposals.datesByArchive[doc.id]?.length || 0) + (doc.pendingIdentifications?.length || 0)) > 0 && (() => {
+                      const toReview = (proposals.byArchive[doc.id]?.length || 0) + (proposals.datesByArchive[doc.id]?.length || 0);
+                      return (
                       <div className="mt-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[10px] font-semibold">
-                        {(proposals.byArchive[doc.id]?.length || 0) > 0 && <span>{proposals.byArchive[doc.id].length} proposition(s) à examiner</span>}
-                        {(proposals.byArchive[doc.id]?.length || 0) > 0 && (doc.pendingIdentifications?.length || 0) > 0 && <span>·</span>}
+                        {toReview > 0 && <span>{toReview} proposition(s) à examiner</span>}
+                        {toReview > 0 && (doc.pendingIdentifications?.length || 0) > 0 && <span>·</span>}
                         {(doc.pendingIdentifications?.length || 0) > 0 && <span>{doc.pendingIdentifications!.length} à créer</span>}
                       </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Linked persons indicators */}
                     {doc.linkedPersonIds && doc.linkedPersonIds.length > 0 && (
@@ -694,13 +699,15 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
               )}
 
               {/* Propositions d'identification reçues pour cette photo (liens partagés) */}
-              {proposals && ((proposals.byArchive[selectedDoc.id]?.length || 0) > 0 || (selectedDoc.pendingIdentifications?.length || 0) > 0 || reviewedArchiveIds.has(selectedDoc.id)) && (
+              {proposals && ((proposals.byArchive[selectedDoc.id]?.length || 0) > 0 || (proposals.datesByArchive[selectedDoc.id]?.length || 0) > 0 || (selectedDoc.pendingIdentifications?.length || 0) > 0 || reviewedArchiveIds.has(selectedDoc.id)) && (
                 <div className="px-6">
                   <ProposalReviewPanel
                     key={selectedDoc.id}
                     archive={selectedDoc}
                     data={data}
                     proposals={proposals.byArchive[selectedDoc.id] || []}
+                    dateProposals={proposals.datesByArchive[selectedDoc.id] || []}
+                    onResolveDate={(proposal, apply) => { markReviewed(selectedDoc.id); return proposals.onResolveDate(selectedDoc, proposal, apply); }}
                     onResolve={(item, resolution) => { markReviewed(selectedDoc.id); return proposals.onResolve(selectedDoc, item, resolution); }}
                     onResolvePending={(pendingId, personId) => { markReviewed(selectedDoc.id); return proposals.onResolvePending(selectedDoc, pendingId, personId); }}
                     onRepublish={photoShare?.records.find(r => r.archiveId === selectedDoc.id)

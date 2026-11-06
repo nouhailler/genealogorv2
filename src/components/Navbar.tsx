@@ -232,13 +232,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
         <button
           onClick={() => onTabChange('archives')}
-          aria-label={pendingProposalsCount > 0 ? `Archives & Actes, ${pendingProposalsCount} proposition(s) d'identification à examiner` : undefined}
+          aria-label={pendingProposalsCount > 0 ? `Archives & Actes, ${pendingProposalsCount} proposition(s) à examiner` : undefined}
           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md whitespace-nowrap ${activeTab === 'archives' ? 'font-bold text-amber-950 dark:text-amber-200 bg-amber-100/70 dark:bg-amber-950/60' : 'text-stone-600 dark:text-stone-400'}`}
         >
           Archives & Actes
           {pendingProposalsCount > 0 && (
             <span
-              title={`${pendingProposalsCount} proposition(s) d'identification à examiner`}
+              title={`${pendingProposalsCount} proposition(s) à examiner`}
               className="min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold leading-[1.125rem] text-center"
             >
               {pendingProposalsCount > 99 ? '99+' : pendingProposalsCount}

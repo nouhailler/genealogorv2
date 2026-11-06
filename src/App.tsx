@@ -55,7 +55,7 @@ import {
   upsertPhotoShareRecord,
 } from './lib/photo-share';
 import { SharedPhotoView } from './components/SharedPhotoView';
-import { sealSubmission, openSubmission, flattenSubmission, withoutItems, newProposalId, ReceivedProposalItem } from './lib/photo-proposals';
+import { sealSubmission, openSubmission, flattenSubmission, dateFromSubmission, withoutItems, newProposalId, ReceivedProposalItem, ReceivedDateProposal } from './lib/photo-proposals';
 import { FanChartView } from './components/views/FanChartView';
 import { DescendantsView } from './components/views/DescendantsView';
 import { ImplexView } from './components/views/ImplexView';
@@ -1067,7 +1067,7 @@ export default function App() {
               return null;
             }
           }));
-          setProposalDocs(prev => ({ ...prev, [record.token]: opened.filter((o): o is OpenedProposal => o !== null && o.submission.items.length > 0) }));
+          setProposalDocs(prev => ({ ...prev, [record.token]: opened.filter((o): o is OpenedProposal => o !== null && (o.submission.items.length > 0 || !!o.submission.date)) }));
         },
         e => console.warn('Lecture des propositions impossible (règles Firestore déployées ?) :', e)
       )
@@ -1086,22 +1086,34 @@ export default function App() {
     return byArchive;
   }, [proposalDocs, photoShareRecords]);
 
+  const dateProposalsByArchive = useMemo(() => {
+    const byArchive: Record<string, ReceivedDateProposal[]> = {};
+    for (const record of photoShareRecords) {
+      for (const d of proposalDocs[record.token] || []) {
+        const dp = dateFromSubmission(record.token, d.docId, d.submission, d.createdAt);
+        if (dp) (byArchive[record.archiveId] ||= []).push(dp);
+      }
+    }
+    return byArchive;
+  }, [proposalDocs, photoShareRecords]);
+
   // Signalement à l'ouverture et à chaque nouvel envoi
-  const proposalTotal = Object.values(proposalsByArchive).reduce((n, l) => n + l.length, 0);
+  const proposalTotal = Object.values(proposalsByArchive).reduce((n, l) => n + l.length, 0)
+    + Object.values(dateProposalsByArchive).reduce((n, l) => n + l.length, 0);
   const lastProposalTotalRef = React.useRef(0);
   useEffect(() => {
     if (proposalTotal > lastProposalTotalRef.current) {
-      showToast(`${proposalTotal} proposition(s) d'identification à examiner (Archives & Actes).`);
+      showToast(`${proposalTotal} proposition(s) à examiner (Archives & Actes).`);
     }
     lastProposalTotalRef.current = proposalTotal;
   }, [proposalTotal]);
 
   /** Retire une proposition traitée de son envoi (réécrit chiffré, ou supprimé s'il n'en reste plus) */
-  const removeProposalItem = async (item: ReceivedProposalItem) => {
+  const removeProposalItem = async (item: ReceivedProposalItem | ReceivedDateProposal) => {
     const record = photoShareRecords.find(r => r.token === item.token);
     const opened = (proposalDocs[item.token] || []).find(d => d.docId === item.docId);
     if (!record || !opened) return;
-    const rest = withoutItems(opened.submission, [item.index]);
+    const rest = 'index' in item ? withoutItems(opened.submission, [item.index]) : withoutItems(opened.submission, [], true);
     try {
       if (!rest) await deletePhotoProposal(item.token, item.docId);
       else {
@@ -1142,6 +1154,12 @@ export default function App() {
       await handleUpdateArchive({ ...archive, pendingIdentifications: [...(archive.pendingIdentifications || []), pendingItem], updatedAt: Date.now() });
     }
     await removeProposalItem(item);
+  };
+
+  /** Date proposée : appliquée à l'archive (date de la photo) ou refusée */
+  const handleResolveDateProposal = async (archive: ArchiveDocument, proposal: ReceivedDateProposal, apply: boolean) => {
+    if (apply) await handleUpdateArchive({ ...archive, date: proposal.value, updatedAt: Date.now() });
+    await removeProposalItem(proposal);
   };
 
   const handleResolvePendingIdentification = async (archive: ArchiveDocument, pendingId: string, personId: string | null) => {
@@ -1833,6 +1851,8 @@ export default function App() {
             onDeleteArchive={userRole === 'admin' ? handleDeleteArchive : undefined}
             proposals={userRole === 'admin' && !isSharedView ? {
               byArchive: proposalsByArchive,
+              datesByArchive: dateProposalsByArchive,
+              onResolveDate: handleResolveDateProposal,
               onResolve: handleResolveProposal,
               onResolvePending: handleResolvePendingIdentification,
             } : undefined}

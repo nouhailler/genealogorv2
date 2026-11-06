@@ -16,6 +16,8 @@ export const PROPOSAL_LIMITS = {
   DETAILS: 300,
   PROPOSER: 80,
   COMMENT: 500,
+  DATE: 60,
+  DATE_NOTE: 300,
   /** Doit rester sous la limite des règles Firestore (30 000) */
   MAX_PAYLOAD_CHARS: 28_000,
 };
@@ -30,10 +32,29 @@ export interface ProposalItem {
   details?: string;
 }
 
+/** Datation proposée pour la photo (texte libre : « juin 1952 », « vers 1950 »…) */
+export interface DateProposal {
+  value: string;
+  /** Sur quoi s'appuie la proposition (« d'après la robe de mariée ») */
+  note?: string;
+}
+
 export interface ProposalSubmission {
   items: ProposalItem[];
+  date?: DateProposal;
   proposer?: string;
   comment?: string;
+}
+
+/** Date proposée déchiffrée, telle que l'administrateur l'examine */
+export interface ReceivedDateProposal extends DateProposal {
+  /** `<jeton>/<document>/date` */
+  key: string;
+  token: string;
+  docId: string;
+  proposer?: string;
+  comment?: string;
+  submittedAt?: number;
 }
 
 /** Proposition déchiffrée, telle que l'administrateur l'examine */
@@ -71,16 +92,25 @@ export function sanitizeSubmission(raw: unknown): ProposalSubmission {
   }
   const proposer = clip(r.proposer, PROPOSAL_LIMITS.PROPOSER);
   const comment = typeof r.comment === 'string' ? r.comment.trim().slice(0, PROPOSAL_LIMITS.COMMENT) || undefined : undefined;
-  return { items, ...(proposer ? { proposer } : {}), ...(comment ? { comment } : {}) };
+  const rawDate = r.date && typeof r.date === 'object' ? (r.date as Record<string, unknown>) : null;
+  const dateValue = rawDate ? clip(rawDate.value, PROPOSAL_LIMITS.DATE) : undefined;
+  const dateNote = rawDate ? clip(rawDate.note, PROPOSAL_LIMITS.DATE_NOTE) : undefined;
+  return {
+    items,
+    ...(dateValue ? { date: { value: dateValue, ...(dateNote ? { note: dateNote } : {}) } } : {}),
+    ...(proposer ? { proposer } : {}),
+    ...(comment ? { comment } : {}),
+  };
 }
 
 /** Chiffre un envoi avec la clé du lien */
 export async function sealSubmission(submission: ProposalSubmission, shareKey: string): Promise<{ payload: string; count: number }> {
   const clean = sanitizeSubmission(submission);
-  if (clean.items.length === 0) throw new Error('Aucune proposition à envoyer.');
+  if (clean.items.length === 0 && !clean.date) throw new Error('Aucune proposition à envoyer.');
   const payload = await encryptData(JSON.stringify({ v: 1, ...clean }), shareKey);
   if (payload.length > PROPOSAL_LIMITS.MAX_PAYLOAD_CHARS) throw new Error('Envoi trop volumineux : réduisez les commentaires.');
-  return { payload, count: clean.items.length };
+  // Indicatif (règles : 1 à 20) ; un envoi ne contenant qu'une date compte pour 1
+  return { payload, count: Math.max(1, clean.items.length) };
 }
 
 export async function openSubmission(payload: string, shareKey: string): Promise<ProposalSubmission> {
@@ -101,11 +131,27 @@ export function flattenSubmission(token: string, docId: string, submission: Prop
   }));
 }
 
-/** Envoi après retrait des propositions traitées ; null s'il n'en reste plus (document à supprimer) */
-export function withoutItems(submission: ProposalSubmission, handledIndexes: number[]): ProposalSubmission | null {
+/** Date proposée d'un envoi reçu, ou null */
+export function dateFromSubmission(token: string, docId: string, submission: ProposalSubmission, submittedAt?: number): ReceivedDateProposal | null {
+  if (!submission.date) return null;
+  return {
+    ...submission.date,
+    key: `${token}/${docId}/date`,
+    token,
+    docId,
+    ...(submission.proposer ? { proposer: submission.proposer } : {}),
+    ...(submission.comment ? { comment: submission.comment } : {}),
+    ...(submittedAt ? { submittedAt } : {}),
+  };
+}
+
+/** Envoi après retrait des propositions traitées (et de la date si `removeDate`) ; null s'il n'en reste plus */
+export function withoutItems(submission: ProposalSubmission, handledIndexes: number[], removeDate = false): ProposalSubmission | null {
   const handled = new Set(handledIndexes);
   const items = submission.items.filter((_, i) => !handled.has(i));
-  return items.length ? { ...submission, items } : null;
+  const { date, ...rest } = submission;
+  const keepDate = date && !removeDate ? { date } : {};
+  return items.length || (date && !removeDate) ? { ...rest, items, ...keepDate } : null;
 }
 
 /** Identifiant de document aléatoire (règles : ≥ 16 caractères, [A-Za-z0-9_-]) */

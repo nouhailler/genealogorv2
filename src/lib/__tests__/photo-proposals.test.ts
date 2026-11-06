@@ -5,6 +5,7 @@ import {
   openSubmission,
   flattenSubmission,
   withoutItems,
+  dateFromSubmission,
   newProposalId,
   suggestPersons,
   PROPOSAL_LIMITS,
@@ -74,6 +75,7 @@ describe('chiffrement avec la clé du lien', () => {
       items: Array.from({ length: PROPOSAL_LIMITS.MAX_ITEMS }, (_, i) => ({
         x: 12.34, y: 56.78, name: 'é'.repeat(PROPOSAL_LIMITS.NAME), details: 'à'.repeat(PROPOSAL_LIMITS.DETAILS),
       })),
+      date: { value: 'd'.repeat(PROPOSAL_LIMITS.DATE), note: 'é'.repeat(PROPOSAL_LIMITS.DATE_NOTE) },
       proposer: 'n'.repeat(PROPOSAL_LIMITS.PROPOSER),
       comment: 'c'.repeat(PROPOSAL_LIMITS.COMMENT),
     };
@@ -81,6 +83,33 @@ describe('chiffrement avec la clé du lien', () => {
     const { payload, count } = await sealSubmission(max, generateShareKey());
     expect(count).toBe(PROPOSAL_LIMITS.MAX_ITEMS);
     expect(payload.length).toBeLessThanOrEqual(PROPOSAL_LIMITS.MAX_PAYLOAD_CHARS);
+  });
+});
+
+describe('date proposée pour la photo', () => {
+  it('peut être envoyée seule, chiffrée, et compte pour 1', async () => {
+    const key = generateShareKey();
+    const { payload, count } = await sealSubmission({ items: [], date: { value: '  juin   1952 ', note: 'mariage de Jean et Renée' }, proposer: 'Robert' }, key);
+    expect(count).toBe(1);
+    const opened = await openSubmission(payload, key);
+    expect(opened).toEqual({ items: [], date: { value: 'juin 1952', note: 'mariage de Jean et Renée' }, proposer: 'Robert' });
+    expect(dateFromSubmission('shr-a', 'prp-1', opened, 5)).toMatchObject({ key: 'shr-a/prp-1/date', value: 'juin 1952', proposer: 'Robert', submittedAt: 5 });
+  });
+
+  it('est ignorée si vide, et tronquée si trop longue', () => {
+    expect(sanitizeSubmission({ items: [], date: { value: '   ' } })).toEqual({ items: [] });
+    expect(sanitizeSubmission({ items: [], date: { value: 'x'.repeat(200) } }).date!.value).toHaveLength(PROPOSAL_LIMITS.DATE);
+    expect(dateFromSubmission('t', 'd', { items: [] })).toBeNull();
+  });
+
+  it('se retire séparément des visages', () => {
+    const both = sanitizeSubmission({ ...submission, date: { value: '1952' } });
+    const onlyFaces = withoutItems(both, [], true)!;
+    expect(onlyFaces.date).toBeUndefined();
+    expect(onlyFaces.items).toHaveLength(2);
+    const onlyDate = withoutItems(both, [0, 1])!;
+    expect(onlyDate).toMatchObject({ items: [], date: { value: '1952' } });
+    expect(withoutItems(onlyDate, [], true)).toBeNull();
   });
 });
 

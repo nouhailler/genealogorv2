@@ -3,6 +3,14 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.23.0] — 2026-11-06
+
+### 📅 Ajouté — Proposer la date d'une photo partagée
+- Page d'une photo partagée : bouton **« Proposer une date »**. Le visiteur indique quand la photo a été prise, en texte libre (« 14 juin 1952 », « été 1950 », « vers 1948 ») et, s'il le souhaite, sur quoi il s'appuie (inscription au dos, mariage de…). La date actuellement indiquée est rappelée.
+- La date proposée rejoint le récapitulatif ; elle peut être envoyée seule ou avec des propositions de visages, chiffrée comme elles.
+- Administrateur : section « Date de la photo proposée » dans le panneau des propositions, avec la date actuelle pour comparer ; **« Appliquer cette date »** met à jour la date de l'archive, **« Refuser »** l'écarte. Les dates comptent dans la pastille de l'onglet et le badge de la photo.
+- Règles Firestore inchangées (rien à redéployer).
+
 ## [2.22.2] — 2026-11-06
 
 ### 🔍 Ajouté — Voir le visage proposé de près

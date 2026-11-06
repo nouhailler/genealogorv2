@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Inbox, Check, Clock, X, Search, UserCheck, RefreshCw, Trash2, Loader2, Maximize2, Minimize2, ZoomIn } from 'lucide-react';
+import { Inbox, Check, Clock, X, Search, UserCheck, RefreshCw, Trash2, Loader2, Maximize2, Minimize2, ZoomIn, CalendarCheck } from 'lucide-react';
 import { ArchiveDocument, GenealogyData, Individual } from '../types/genealogy';
-import { ReceivedProposalItem, suggestPersons } from '../lib/photo-proposals';
+import { ReceivedProposalItem, ReceivedDateProposal, suggestPersons } from '../lib/photo-proposals';
 import { normalize } from '../lib/place-gazetteer';
 
 export type ProposalResolution =
@@ -13,6 +13,9 @@ interface ProposalReviewPanelProps {
   archive: ArchiveDocument;
   data: GenealogyData;
   proposals: ReceivedProposalItem[];
+  /** Dates proposées pour la photo */
+  dateProposals?: ReceivedDateProposal[];
+  onResolveDate?: (proposal: ReceivedDateProposal, apply: boolean) => Promise<void>;
   onResolve: (item: ReceivedProposalItem, resolution: ProposalResolution) => Promise<void>;
   /** Associe (personId) ou retire (null) une identification gardée « à créer plus tard » */
   onResolvePending: (pendingId: string, personId: string | null) => Promise<void>;
@@ -108,6 +111,8 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
   archive,
   data,
   proposals,
+  dateProposals = [],
+  onResolveDate,
   onResolve,
   onResolvePending,
   onRepublish,
@@ -124,7 +129,7 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
   const [faceZoom, setFaceZoom] = useState(5);
   const [aspect, setAspect] = useState(0);
 
-  if (proposals.length === 0 && pending.length === 0 && !needsRepublish) return null;
+  if (proposals.length === 0 && dateProposals.length === 0 && pending.length === 0 && !needsRepublish) return null;
 
   const run = async (key: string, action: () => Promise<void>, changesTags = false) => {
     setBusyKey(key);
@@ -161,7 +166,7 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
         <div className="flex items-center gap-2">
           <Inbox className="w-4 h-4 text-amber-800" />
           <h3 className="font-serif text-base font-bold text-stone-900">
-            Propositions d'identification ({proposals.length})
+            Propositions ({proposals.length + dateProposals.length})
             {pending.length > 0 && <span className="font-sans text-xs font-normal text-stone-600"> · {pending.length} personne(s) à créer</span>}
           </h3>
         </div>
@@ -196,7 +201,7 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
 
       {needsRepublish && (
         <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs text-emerald-900">
-          <span>Les repères validés ne sont pas encore visibles par les personnes qui ont reçu le lien.</span>
+          <span>Ce que vous venez de valider n'est pas encore visible par les personnes qui ont reçu le lien.</span>
           <button
             type="button"
             onClick={republish}
@@ -209,6 +214,47 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
       )}
 
       {error && <p role="alert" className="text-xs text-rose-700">{error}</p>}
+
+      {/* Datation proposée */}
+      {dateProposals.length > 0 && onResolveDate && (
+        <div className="space-y-2">
+          <h4 className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
+            <CalendarCheck className="w-3.5 h-3.5" /> Date de la photo proposée ({dateProposals.length})
+            <span className="font-normal text-stone-500">· date actuelle : {archive.date || 'aucune'}</span>
+          </h4>
+          {dateProposals.map(dp => (
+            <div key={dp.key} className="flex flex-wrap items-start justify-between gap-2 p-3 rounded-xl bg-white border border-stone-200">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-stone-900 break-words">{dp.value}</p>
+                {dp.note && <p className="text-xs text-stone-600 break-words">{dp.note}</p>}
+                <p className="text-[10px] text-stone-400">
+                  Proposé{dp.proposer ? ` par ${dp.proposer}` : ''}{dp.submittedAt ? ` le ${fmtDate(dp.submittedAt)}` : ''}
+                </p>
+                {dp.comment && <p className="text-[11px] text-stone-500 italic break-words">« {dp.comment} »</p>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {busyKey === dp.key && <Loader2 className="w-4 h-4 animate-spin text-stone-400" />}
+                <button
+                  type="button"
+                  disabled={busyKey !== null}
+                  onClick={() => run(dp.key, () => onResolveDate(dp, true), true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 disabled:opacity-50 cursor-pointer"
+                >
+                  <Check className="w-3 h-3" /> Appliquer cette date
+                </button>
+                <button
+                  type="button"
+                  disabled={busyKey !== null}
+                  onClick={() => run(dp.key, () => onResolveDate(dp, false))}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-lg text-rose-700 hover:bg-rose-50 disabled:opacity-50 cursor-pointer"
+                >
+                  <X className="w-3 h-3" /> Refuser
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className={`grid grid-cols-1 gap-4 items-start ${photoLarge ? '' : 'lg:grid-cols-5'}`}>
         {/* Photo avec les propositions (pointillés) et les personnes à créer (gris) */}
@@ -356,7 +402,7 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
             </div>
           )}
 
-          {proposals.length === 0 && pending.length === 0 && (
+          {proposals.length === 0 && dateProposals.length === 0 && pending.length === 0 && (
             <p className="text-xs text-stone-600 flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-700" /> Toutes les propositions ont été traitées.</p>
           )}
         </div>

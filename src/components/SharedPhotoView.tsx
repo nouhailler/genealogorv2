@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Calendar, MapPin, Eye, EyeOff, UserPlus, Send, Pencil, Trash2, CheckCircle2, X, Loader2 } from 'lucide-react';
+import { Calendar, CalendarPlus, MapPin, Eye, EyeOff, UserPlus, Send, Pencil, Trash2, CheckCircle2, X, Loader2 } from 'lucide-react';
 import { Logo } from './Logo';
 import { PhotoShareSnapshot, LIVING_PLACEHOLDER } from '../lib/photo-share';
-import { ProposalItem, ProposalSubmission, PROPOSAL_LIMITS } from '../lib/photo-proposals';
+import { ProposalItem, ProposalSubmission, DateProposal, PROPOSAL_LIMITS } from '../lib/photo-proposals';
 
 interface SharedPhotoViewProps {
   snapshot: PhotoShareSnapshot;
@@ -31,6 +31,9 @@ export const SharedPhotoView: React.FC<SharedPhotoViewProps> = ({ snapshot, onSu
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sentCount, setSentCount] = useState<number | null>(null);
+  // Datation proposée
+  const [dateProposal, setDateProposal] = useState<DateProposal | null>(null);
+  const [dateForm, setDateForm] = useState<DateProposal | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -76,13 +79,19 @@ export const SharedPhotoView: React.FC<SharedPhotoViewProps> = ({ snapshot, onSu
   };
 
   const send = async () => {
-    if (!onSubmitProposals || items.length === 0) return;
+    if (!onSubmitProposals || (items.length === 0 && !dateProposal)) return;
     setSending(true);
     setSendError(null);
     try {
-      await onSubmitProposals({ items, ...(proposer.trim() ? { proposer: proposer.trim() } : {}), ...(comment.trim() ? { comment: comment.trim() } : {}) });
-      setSentCount(items.length);
+      await onSubmitProposals({
+        items,
+        ...(dateProposal ? { date: dateProposal } : {}),
+        ...(proposer.trim() ? { proposer: proposer.trim() } : {}),
+        ...(comment.trim() ? { comment: comment.trim() } : {}),
+      });
+      setSentCount(items.length + (dateProposal ? 1 : 0));
       setItems([]);
+      setDateProposal(null);
       setComment('');
       setProposing(false);
     } catch (e: any) {
@@ -127,6 +136,15 @@ export const SharedPhotoView: React.FC<SharedPhotoViewProps> = ({ snapshot, onSu
               <UserPlus className="w-3.5 h-3.5" />
               {proposing ? 'Terminer' : 'Proposer une identification'}
             </button>
+            <button
+              type="button"
+              onClick={() => { setDateForm(dateForm ? null : (dateProposal || { value: '', note: '' })); setSentCount(null); setSendError(null); }}
+              aria-pressed={dateForm !== null}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border shadow-sm cursor-pointer bg-white dark:bg-[#1A1D24] text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+            >
+              <CalendarPlus className="w-3.5 h-3.5" />
+              {dateProposal ? 'Modifier la date proposée' : 'Proposer une date'}
+            </button>
             {proposing && (
               <span className="text-xs text-stone-600 dark:text-stone-400">
                 Cliquez sur un visage que vous reconnaissez, puis indiquez qui c'est.
@@ -135,12 +153,55 @@ export const SharedPhotoView: React.FC<SharedPhotoViewProps> = ({ snapshot, onSu
           </div>
         )}
 
+        {onSubmitProposals && dateForm && (
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              if (!dateForm.value.trim()) return;
+              setDateProposal({
+                value: dateForm.value.trim().slice(0, PROPOSAL_LIMITS.DATE),
+                ...(dateForm.note?.trim() ? { note: dateForm.note.trim().slice(0, PROPOSAL_LIMITS.DATE_NOTE) } : {}),
+              });
+              setDateForm(null);
+            }}
+            className="max-w-xl p-3 rounded-xl bg-white dark:bg-[#1A1D24] border border-amber-200 dark:border-amber-900/60 shadow-sm space-y-2"
+          >
+            <p className="text-xs font-bold">Quand cette photo a-t-elle été prise ?</p>
+            <p className="text-[11px] text-stone-500 dark:text-stone-400">
+              Date indiquée actuellement : {date ? <strong>{date}</strong> : 'aucune'}.
+            </p>
+            <input
+              value={dateForm.value}
+              onChange={e => setDateForm({ ...dateForm, value: e.target.value })}
+              maxLength={PROPOSAL_LIMITS.DATE}
+              placeholder="Ex. 14 juin 1952, été 1950, vers 1948…"
+              aria-label="Date proposée"
+              autoFocus
+              className="w-full text-xs bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-amber-700"
+            />
+            <input
+              value={dateForm.note || ''}
+              onChange={e => setDateForm({ ...dateForm, note: e.target.value })}
+              maxLength={PROPOSAL_LIMITS.DATE_NOTE}
+              placeholder="Comment le savez-vous ? (facultatif) : mariage de…, inscription au dos…"
+              aria-label="Justification de la date"
+              className="w-full text-xs bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-amber-700"
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button type="button" onClick={() => setDateForm(null)} className="px-3 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg">Annuler</button>
+              <button type="submit" disabled={!dateForm.value.trim()} className="px-3 py-1 text-xs font-semibold text-white bg-amber-900 hover:bg-amber-950 rounded-lg disabled:opacity-40">
+                {dateProposal ? 'Enregistrer' : 'Ajouter à mes propositions'}
+              </button>
+            </div>
+          </form>
+        )}
+
         {sentCount !== null && (
           <div role="status" className="flex items-start gap-2 p-3 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 text-sm text-emerald-900 dark:text-emerald-200">
             <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
               Merci ! {sentCount > 1 ? `Vos ${sentCount} propositions ont été envoyées` : 'Votre proposition a été envoyée'} à l'administrateur de l'arbre,
-              qui les examinera une à une. Les identifications validées apparaîtront sur cette page.
+              qui {sentCount > 1 ? 'les examinera une à une' : "l'examinera"}. Ce qu'il validera apparaîtra sur cette page.
             </span>
           </div>
         )}
@@ -259,9 +320,28 @@ export const SharedPhotoView: React.FC<SharedPhotoViewProps> = ({ snapshot, onSu
         </div>
 
         {/* Récapitulatif et envoi */}
-        {onSubmitProposals && items.length > 0 && (
+        {onSubmitProposals && (items.length > 0 || dateProposal) && (
           <section className="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/60 rounded-2xl p-4 sm:p-5 space-y-3">
-            <h2 className="font-serif text-lg font-bold">Vos propositions ({items.length})</h2>
+            <h2 className="font-serif text-lg font-bold">Vos propositions ({items.length + (dateProposal ? 1 : 0)})</h2>
+            {dateProposal && (
+              <div className="flex items-start justify-between gap-2 p-2 rounded-lg bg-white dark:bg-[#1A1D24] border border-amber-100 dark:border-amber-900/40">
+                <span className="flex items-start gap-2 min-w-0">
+                  <CalendarPlus className="w-4 h-4 shrink-0 mt-0.5 text-amber-800 dark:text-amber-400" />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold break-words">Date de la photo : {dateProposal.value}</span>
+                    {dateProposal.note && <span className="block text-xs text-stone-600 dark:text-stone-400 break-words">{dateProposal.note}</span>}
+                  </span>
+                </span>
+                <span className="flex items-center gap-1 shrink-0">
+                  <button type="button" onClick={() => setDateForm(dateProposal)} aria-label="Modifier la date proposée" className="p-1 text-stone-500 hover:text-stone-800">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" onClick={() => setDateProposal(null)} aria-label="Retirer la date proposée" className="p-1 text-stone-500 hover:text-rose-700">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </span>
+              </div>
+            )}
             <ol className="space-y-1.5">
               {items.map((it, i) => (
                 <li key={i} className="flex items-start justify-between gap-2 p-2 rounded-lg bg-white dark:bg-[#1A1D24] border border-amber-100 dark:border-amber-900/40">
@@ -318,7 +398,7 @@ export const SharedPhotoView: React.FC<SharedPhotoViewProps> = ({ snapshot, onSu
             </div>
           </section>
         )}
-        {sendError && items.length === 0 && <p role="alert" className="text-xs text-rose-700 dark:text-rose-400">{sendError}</p>}
+        {sendError && items.length === 0 && !dateProposal && <p role="alert" className="text-xs text-rose-700 dark:text-rose-400">{sendError}</p>}
 
         <section className="bg-white dark:bg-[#1A1D24] border border-stone-200 dark:border-stone-800 rounded-2xl p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3 mb-3">
