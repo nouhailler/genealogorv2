@@ -2,6 +2,21 @@ import { PeerPresence } from '../types/genealogy';
 
 export type SyncCallback = (data: any) => void;
 
+/** Doit rester aligné sur MAX_PAYLOAD_BYTES de server.ts (au-delà, le serveur refuse le message). */
+export const MAX_WS_PAYLOAD_BYTES = 512 * 1024;
+
+/** Taille en octets UTF-8 de la sérialisation JSON. */
+export function jsonByteSize(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).length;
+}
+
+/** Vrai si ce contenu dépasserait, une fois enveloppé, la limite du relais temps réel. */
+export function isTooLargeForRealtime(payload: unknown): boolean {
+  return jsonByteSize(payload) + 1024 > MAX_WS_PAYLOAD_BYTES;
+}
+
+export type SendResult = { success: boolean; error?: string; code?: 'PAYLOAD_TOO_LARGE' };
+
 class RealtimeClient {
   private ws: WebSocket | null = null;
   private channel: BroadcastChannel | null = null;
@@ -133,7 +148,7 @@ class RealtimeClient {
     payload: any, 
     opId?: string, 
     timeoutMs = 6000
-  ): Promise<{ success: boolean; error?: string }> {
+  ): Promise<SendResult> {
     const stableId = opId || ('op-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7));
     const message = {
       type: 'sync:action',
@@ -155,6 +170,17 @@ class RealtimeClient {
       return Promise.resolve({ success: false, error: 'Serveur WebSocket hors ligne' });
     }
 
+    // Ne jamais envoyer un message que le serveur refusera (taille en octets UTF-8).
+    const serialized = JSON.stringify(message);
+    const size = jsonByteSize(message);
+    if (size > MAX_WS_PAYLOAD_BYTES) {
+      return Promise.resolve({
+        success: false,
+        code: 'PAYLOAD_TOO_LARGE',
+        error: `Modification trop volumineuse pour le partage en temps réel (${Math.round(size / 1024)} Ko, limite ${MAX_WS_PAYLOAD_BYTES / 1024} Ko)`,
+      });
+    }
+
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.pendingAcks.delete(stableId);
@@ -164,7 +190,7 @@ class RealtimeClient {
       this.pendingAcks.set(stableId, { resolve, timer });
 
       try {
-        this.ws!.send(JSON.stringify(message));
+        this.ws!.send(serialized);
       } catch (err: any) {
         clearTimeout(timer);
         this.pendingAcks.delete(stableId);

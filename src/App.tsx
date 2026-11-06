@@ -65,7 +65,7 @@ import { GenealogyData, Individual, ArchiveDocument, BranchAccess, BranchRole, B
 import { createEmptyGenealogy } from './lib/sample-data';
 import { getStoredArchives, saveStoredArchives, clearStoredArchives } from './lib/archive-store';
 import { filterGenealogyData } from './lib/branch-filter';
-import { realtimeClient, isJsonResponse } from './lib/realtime-client';
+import { realtimeClient, isJsonResponse, isTooLargeForRealtime } from './lib/realtime-client';
 import { verifyPassword } from './lib/crypto';
 import { validateChronology } from './lib/validation';
 import { 
@@ -605,6 +605,10 @@ export default function App() {
             if (res.success) {
               removePendingChange(change.id);
               syncedCount++;
+            } else if (res.code === 'PAYLOAD_TOO_LARGE') {
+              // Ne passera jamais : on la retire de la file au lieu de la renvoyer à chaque reconnexion.
+              removePendingChange(change.id);
+              console.warn(`Modification ${change.id} retirée de la file :`, res.error);
             } else {
               markPendingChangeFailed(change.id, res.error);
               console.warn(`Échec de confirmation pour la modification ${change.id}:`, res.error);
@@ -889,6 +893,8 @@ export default function App() {
     showToast(`${data.individuals[personId].name} est désormais la racine de l'arbre (Sosa 1).`);
   };
 
+  const REALTIME_TOO_LARGE_NOTE = " — trop volumineux pour être partagé en temps réel avec les membres connectés";
+
   const handleAddArchive = async (newDoc: ArchiveDocument) => {
     if (userRole !== 'admin') {
       showToast("Action refusée : En profil lecteur, l'ajout d'archives n'est pas autorisé.");
@@ -901,7 +907,7 @@ export default function App() {
     setVersionedItem(STORAGE_KEYS.ARCHIVES, nextArchives);
     realtimeClient.sendAction('archive:add', newDoc);
 
-    if (!isWsConnected && isRelayAvailable) {
+    if (!isWsConnected && isRelayAvailable && !isTooLargeForRealtime(newDoc)) {
       addPendingChange('archive:add', newDoc);
     }
 
@@ -912,7 +918,7 @@ export default function App() {
       console.warn('Firestore archive save fallback', e);
     }
 
-    showToast(`Acte archivé : ${newDoc.title}`);
+    showToast(`Acte archivé : ${newDoc.title}${isTooLargeForRealtime(newDoc) ? REALTIME_TOO_LARGE_NOTE : ''}`);
   };
 
   const handleUpdateArchive = async (updated: ArchiveDocument) => {
@@ -927,7 +933,7 @@ export default function App() {
     setVersionedItem(STORAGE_KEYS.ARCHIVES, nextArchives);
     realtimeClient.sendAction('archive:add', updated);
 
-    if (!isWsConnected && isRelayAvailable) {
+    if (!isWsConnected && isRelayAvailable && !isTooLargeForRealtime(updated)) {
       addPendingChange('archive:add', updated);
     }
 
@@ -938,7 +944,7 @@ export default function App() {
       console.warn('Firestore archive update fallback', e);
     }
 
-    showToast(`Acte mis à jour : ${updated.title}`);
+    showToast(`Acte mis à jour : ${updated.title}${isTooLargeForRealtime(updated) ? REALTIME_TOO_LARGE_NOTE : ''}`);
   };
 
   const handleDeleteArchive = async (id: string) => {

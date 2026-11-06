@@ -780,6 +780,21 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     removeClient(ws);
   });
+
+  // Sans ce gestionnaire, une erreur de socket (ex. message > maxPayload, code 1009)
+  // est émise sans écouteur et arrête tout le processus Node.
+  ws.on('error', (err: Error & { code?: string }) => {
+    const info = clients.get(ws);
+    console.warn(
+      `[WS] Erreur de connexion${info?.roomId ? ` (salle ${info.roomId})` : ''} : ${err.code || err.message}`
+    );
+    removeClient(ws);
+    ws.terminate();
+  });
+});
+
+wss.on('error', (err) => {
+  console.error('[WS] Erreur du serveur WebSocket :', err);
 });
 
 function broadcastToRoom(roomId: string, sender: WebSocket, payload: any) {

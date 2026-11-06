@@ -3,6 +3,13 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.19.5] — 2026-11-06
+
+### 🛟 Corrigé — Le serveur s'arrêtait sur un document trop volumineux
+- Un message de plus de 512 Ko (ex. photo d'archive en haute résolution) faisait planter tout le serveur temps réel, coupant tous les membres connectés. Comme la modification restait en file d'attente hors-ligne, elle était renvoyée à chaque reconnexion et le serveur replantait.
+- Le serveur refuse désormais seulement la connexion fautive (code 1009), journalise l'erreur et continue de fonctionner.
+- L'application n'envoie plus au relais temps réel un contenu au-delà de la limite et ne le met plus en file d'attente ; une telle modification déjà en attente est retirée de la file. Le document reste enregistré sur l'appareil (et dans le cloud si connecté), et le message de confirmation précise qu'il n'a pas pu être partagé en temps réel.
+
 ## [2.19.4] — 2026-11-06
 
 ### 🪪 Ajouté — Ouvrir la fiche depuis le cadre de l'arbre
