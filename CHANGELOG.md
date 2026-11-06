@@ -3,6 +3,13 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.22.2] — 2026-11-06
+
+### 🔍 Ajouté — Voir le visage proposé de près
+- Panneau des propositions d'identification : chaque proposition (et chaque « personne à créer ») affiche une **vignette agrandie du visage**, centrée sur le repère proposé. Un clic sur la vignette la double (240 px).
+- Niveau de zoom des vignettes réglable : ×3, ×5 (par défaut) ou ×8, utile sur les photos de groupe où les visages sont petits.
+- Bouton **« Agrandir la photo »** : la photo passe en pleine largeur au-dessus de la liste, pour voir le contexte ; « Réduire la photo » revient à la disposition côte à côte.
+
 ## [2.22.1] — 2026-11-06
 
 ### 🔴 Ajouté — Compteur de propositions sur l'onglet « Archives & Actes »

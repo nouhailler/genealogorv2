@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Inbox, Check, Clock, X, Search, UserCheck, RefreshCw, Trash2, Loader2 } from 'lucide-react';
+import { Inbox, Check, Clock, X, Search, UserCheck, RefreshCw, Trash2, Loader2, Maximize2, Minimize2, ZoomIn } from 'lucide-react';
 import { ArchiveDocument, GenealogyData, Individual } from '../types/genealogy';
 import { ReceivedProposalItem, suggestPersons } from '../lib/photo-proposals';
 import { normalize } from '../lib/place-gazetteer';
@@ -71,6 +71,38 @@ const PersonPicker: React.FC<{
   );
 };
 
+/**
+ * Vue agrandie de la zone d'un repère (visage) : la photo est affichée « zoom » fois plus grande et décalée
+ * pour que le repère soit au centre. Un clic double la taille de la vignette.
+ */
+const FaceZoom: React.FC<{ src: string; x: number; y: number; aspect: number; zoom: number; label: string }> = ({ src, x, y, aspect, zoom, label }) => {
+  const [large, setLarge] = useState(false);
+  if (!aspect) return null;
+  const size = large ? 240 : 112;
+  const width = size * zoom;
+  const height = width * aspect;
+  return (
+    <button
+      type="button"
+      onClick={() => setLarge(v => !v)}
+      title={large ? 'Réduire la vignette' : 'Agrandir la vignette'}
+      aria-label={`Visage proposé : ${label}. ${large ? 'Réduire' : 'Agrandir'} la vignette`}
+      style={{ width: size, height: size }}
+      className="relative shrink-0 overflow-hidden rounded-lg bg-stone-900 border border-stone-300 shadow-inner cursor-zoom-in transition-[width,height] duration-150"
+    >
+      <img
+        src={src}
+        alt=""
+        draggable={false}
+        style={{ position: 'absolute', width, height, maxWidth: 'none', left: size / 2 - (x / 100) * width, top: size / 2 - (y / 100) * height }}
+        className="select-none pointer-events-none"
+      />
+      {/* Repère au centre, discret pour ne pas masquer le visage */}
+      <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-9 h-9 rounded-full border-2 border-dashed border-amber-300/80 pointer-events-none" />
+    </button>
+  );
+};
+
 /** Examen des propositions d'identification reçues pour une photo partagée, et des personnes « à créer » */
 export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
   archive,
@@ -87,6 +119,10 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [needsRepublish, setNeedsRepublish] = useState(false);
   const [republishing, setRepublishing] = useState(false);
+  // Agrandissement : photo en pleine largeur, et niveau de zoom des vignettes de visage
+  const [photoLarge, setPhotoLarge] = useState(false);
+  const [faceZoom, setFaceZoom] = useState(5);
+  const [aspect, setAspect] = useState(0);
 
   if (proposals.length === 0 && pending.length === 0 && !needsRepublish) return null;
 
@@ -121,12 +157,41 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
 
   return (
     <section className="border border-amber-300 bg-amber-50/50 rounded-2xl p-4 space-y-4" aria-label="Propositions d'identification">
-      <div className="flex items-center gap-2">
-        <Inbox className="w-4 h-4 text-amber-800" />
-        <h3 className="font-serif text-base font-bold text-stone-900">
-          Propositions d'identification ({proposals.length})
-          {pending.length > 0 && <span className="font-sans text-xs font-normal text-stone-600"> · {pending.length} personne(s) à créer</span>}
-        </h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Inbox className="w-4 h-4 text-amber-800" />
+          <h3 className="font-serif text-base font-bold text-stone-900">
+            Propositions d'identification ({proposals.length})
+            {pending.length > 0 && <span className="font-sans text-xs font-normal text-stone-600"> · {pending.length} personne(s) à créer</span>}
+          </h3>
+        </div>
+        {archive.fileData && (
+          <div className="flex items-center gap-2 text-[11px]">
+            <div className="flex items-center gap-0.5 bg-white p-0.5 rounded-lg border border-stone-200" role="group" aria-label="Zoom des vignettes de visage">
+              <ZoomIn className="w-3 h-3 text-stone-500 mx-1" />
+              {[3, 5, 8].map(z => (
+                <button
+                  key={z}
+                  type="button"
+                  onClick={() => setFaceZoom(z)}
+                  aria-pressed={faceZoom === z}
+                  className={`px-1.5 py-0.5 rounded-md font-semibold cursor-pointer ${faceZoom === z ? 'bg-stone-800 text-white' : 'text-stone-600 hover:bg-stone-100'}`}
+                >
+                  ×{z}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setPhotoLarge(v => !v)}
+              aria-pressed={photoLarge}
+              className="inline-flex items-center gap-1 px-2 py-1 font-semibold rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 cursor-pointer"
+            >
+              {photoLarge ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+              {photoLarge ? 'Réduire la photo' : 'Agrandir la photo'}
+            </button>
+          </div>
+        )}
       </div>
 
       {needsRepublish && (
@@ -145,12 +210,18 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
 
       {error && <p role="alert" className="text-xs text-rose-700">{error}</p>}
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
+      <div className={`grid grid-cols-1 gap-4 items-start ${photoLarge ? '' : 'lg:grid-cols-5'}`}>
         {/* Photo avec les propositions (pointillés) et les personnes à créer (gris) */}
         {archive.fileData && (
-          <div className="lg:col-span-2 bg-stone-900 rounded-xl p-2 flex justify-center">
+          <div className={`${photoLarge ? '' : 'lg:col-span-2'} bg-stone-900 rounded-xl p-2 flex justify-center`}>
             <div className="relative inline-block max-w-full">
-              <img src={archive.fileData} alt={archive.title} className="block max-w-full max-h-80 w-auto h-auto rounded-lg select-none" draggable={false} />
+              <img
+                src={archive.fileData}
+                alt={archive.title}
+                onLoad={e => setAspect(e.currentTarget.naturalHeight / e.currentTarget.naturalWidth || 0)}
+                className={`block max-w-full w-auto h-auto rounded-lg select-none ${photoLarge ? 'max-h-[70vh]' : 'max-h-80'}`}
+                draggable={false}
+              />
               {proposals.map((p, i) => (
                 <span
                   key={p.key}
@@ -177,7 +248,7 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
           </div>
         )}
 
-        <div className="lg:col-span-3 space-y-3">
+        <div className={`${photoLarge ? '' : 'lg:col-span-3'} space-y-3`}>
           {proposals.map((p, i) => {
             const busy = busyKey === p.key;
             return (
@@ -188,6 +259,8 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
                 className="p-3 rounded-xl bg-white border border-stone-200 space-y-2"
               >
                 <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-3 min-w-0">
+                  {archive.fileData && <FaceZoom src={archive.fileData} x={p.x} y={p.y} aspect={aspect} zoom={faceZoom} label={p.name} />}
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-stone-900 break-words">
                       <span className="font-mono text-[10px] text-amber-800 mr-1.5">P{i + 1}</span>{p.name}
@@ -197,6 +270,7 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
                       Proposé{p.proposer ? ` par ${p.proposer}` : ''}{p.submittedAt ? ` le ${fmtDate(p.submittedAt)}` : ''}
                     </p>
                     {p.comment && <p className="text-[11px] text-stone-500 italic break-words">« {p.comment} »</p>}
+                  </div>
                   </div>
                   {busy && <Loader2 className="w-4 h-4 animate-spin text-stone-400 shrink-0" />}
                 </div>
@@ -247,6 +321,8 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
                     className="p-3 rounded-xl bg-white border border-dashed border-stone-300 space-y-2"
                   >
                     <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-3 min-w-0">
+                      {archive.fileData && <FaceZoom src={archive.fileData} x={p.x} y={p.y} aspect={aspect} zoom={faceZoom} label={p.name} />}
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-stone-900 break-words">
                           <span className="font-mono text-[10px] text-stone-500 mr-1.5">C{i + 1}</span>{p.name}
@@ -255,6 +331,7 @@ export const ProposalReviewPanel: React.FC<ProposalReviewPanelProps> = ({
                         <p className="text-[10px] text-stone-400">
                           Proposé{p.proposer ? ` par ${p.proposer}` : ''} le {fmtDate(p.receivedAt)}
                         </p>
+                      </div>
                       </div>
                       <button
                         type="button"
