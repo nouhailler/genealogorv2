@@ -3,6 +3,13 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.24.1] — 2026-11-06
+
+### 🔎 Ajouté — Loupe sur les photos dans Genealogor
+- Fiche d'archive (Archives & Actes) : bouton **« Loupe »** dans la barre de la photo, avec grossissement ×2, ×3 ou ×4. La loupe suit la souris (ou le doigt, en se plaçant au-dessus de lui) et utilise l'image d'origine en pleine résolution, plus nette que la version allégée des liens partagés.
+- Fonctionne avec le zoom et la rotation de la vue (la zone grossie correspond exactement au point visé) et reprend le filtre choisi (contraste, négatif, niveaux de gris). Utilisable pendant le mode marquage pour viser le bon visage.
+- Loupe de la photo partagée : correction d'un léger décalage (4 px) entre le point visé et le centre de la loupe, dû à sa bordure.
+
 ## [2.24.0] — 2026-11-06
 
 ### 🔎 Ajouté — Loupe sur la photo partagée

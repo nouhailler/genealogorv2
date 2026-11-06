@@ -299,12 +299,14 @@ export const SharedPhotoView: React.FC<SharedPhotoViewProps> = ({ snapshot, onSu
                     backgroundSize: `${lens.w * loupeZoom}px ${lens.h * loupeZoom}px`,
                     backgroundPosition: `${targetX - lens.x * loupeZoom}px ${targetY - lens.y * loupeZoom}px`,
                     backgroundColor: '#1c1917',
+                    // Fond positionné depuis le bord extérieur : le point visé tombe juste malgré la bordure (4 px)
+                    backgroundOrigin: 'border-box',
                   }}
                 >
                   {/* Point visé */}
                   <span
                     className="absolute w-2 h-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/80 bg-amber-500/60"
-                    style={{ left: targetX, top: targetY }}
+                    style={{ left: targetX - 4, top: targetY - 4 }}
                   />
                 </div>
               );

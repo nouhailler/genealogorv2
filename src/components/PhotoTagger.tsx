@@ -4,6 +4,7 @@ import {
   Eye, EyeOff, Check, Search, Sparkles, MapPin, Calendar,
   Shield, Info, ZoomIn, ZoomOut, RotateCw, Contrast
 } from 'lucide-react';
+import { Search as LoupeIcon } from 'lucide-react';
 import { ArchiveDocument, GenealogyData, Individual, PhotoTag } from '../types/genealogy';
 
 interface PhotoTaggerProps {
@@ -39,6 +40,37 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
 
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Loupe : suit la souris (ou le doigt, au-dessus de lui) et grossit la zone survolée de l'image d'origine
+  const [loupe, setLoupe] = useState(false);
+  const [loupeZoom, setLoupeZoom] = useState(3);
+  const [lens, setLens] = useState<{ x: number; y: number; w: number; h: number; touch: boolean } | null>(null);
+
+  /** Position du pointeur dans l'image non transformée (tient compte du zoom et de la rotation de la vue) */
+  const moveLens = (clientX: number, clientY: number, touch: boolean) => {
+    const img = imageRef.current;
+    if (!img) return;
+    const w = img.offsetWidth, h = img.offsetHeight;
+    const r = img.getBoundingClientRect();
+    const dx = (clientX - (r.left + r.width / 2)) / zoom;
+    const dy = (clientY - (r.top + r.height / 2)) / zoom;
+    const a = (-rotation * Math.PI) / 180;
+    const x = dx * Math.cos(a) - dy * Math.sin(a) + w / 2;
+    const y = dx * Math.sin(a) + dy * Math.cos(a) + h / 2;
+    if (x < 0 || y < 0 || x > w || y > h) {
+      setLens(null);
+      return;
+    }
+    setLens({ x, y, w, h, touch });
+  };
+
+  const imageFilter = filterMode === 'contrast'
+    ? 'contrast(170%) brightness(95%)'
+    : filterMode === 'invert'
+      ? 'invert(100%) contrast(150%)'
+      : filterMode === 'grayscale'
+        ? 'grayscale(100%) contrast(130%)'
+        : 'none';
 
   const tags = document.photoTags || [];
 
@@ -170,6 +202,32 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
             </span>
           </button>
 
+          <button
+            onClick={() => { setLoupe(v => !v); setLens(null); }}
+            aria-pressed={loupe}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all ${
+              loupe ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-800 border-stone-300'
+            }`}
+            title="Loupe : promenez la souris sur la photo pour grossir les visages"
+          >
+            <LoupeIcon className="w-3.5 h-3.5" />
+            <span>{loupe ? 'Loupe activée' : 'Loupe'}</span>
+          </button>
+          {loupe && (
+            <div className="flex items-center gap-0.5 bg-white p-0.5 rounded-lg border border-stone-200" role="group" aria-label="Grossissement de la loupe">
+              {[2, 3, 4].map(z => (
+                <button
+                  key={z}
+                  onClick={() => setLoupeZoom(z)}
+                  aria-pressed={loupeZoom === z}
+                  className={`px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${loupeZoom === z ? 'bg-stone-800 text-white' : 'text-stone-600 hover:bg-stone-100'}`}
+                >
+                  ×{z}
+                </button>
+              ))}
+            </div>
+          )}
+
           {isTaggingMode && (
             <span className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md font-medium hidden sm:inline-flex items-center gap-1">
               <Sparkles className="w-3 h-3 text-amber-700" />
@@ -234,6 +292,11 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
             transform: `scale(${zoom}) rotate(${rotation}deg)`,
             transformOrigin: 'center center',
           }}
+          onMouseMove={loupe ? e => moveLens(e.clientX, e.clientY, false) : undefined}
+          onMouseLeave={loupe ? () => setLens(null) : undefined}
+          onTouchStart={loupe ? e => moveLens(e.touches[0].clientX, e.touches[0].clientY, true) : undefined}
+          onTouchMove={loupe ? e => moveLens(e.touches[0].clientX, e.touches[0].clientY, true) : undefined}
+          onTouchEnd={loupe ? () => setLens(null) : undefined}
         >
           {/* Main Image */}
           <img
@@ -241,19 +304,45 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
             src={document.fileData}
             alt={document.title}
             onClick={handleImageClick}
-            style={{
-              filter: filterMode === 'contrast'
-                ? 'contrast(170%) brightness(95%)'
-                : filterMode === 'invert'
-                  ? 'invert(100%) contrast(150%)'
-                  : filterMode === 'grayscale'
-                    ? 'grayscale(100%) contrast(130%)'
-                    : 'none',
-            }}
+            style={{ filter: imageFilter, ...(loupe ? { touchAction: 'none' } : {}) }}
             className={`max-h-[520px] w-auto object-contain rounded-lg shadow-2xl block transition-all ${
-              isTaggingMode ? 'cursor-crosshair ring-2 ring-amber-500' : 'cursor-default'
+              isTaggingMode ? 'cursor-crosshair ring-2 ring-amber-500' : loupe ? 'cursor-none' : 'cursor-default'
             }`}
           />
+
+          {/* Loupe : zone survolée grossie (image d'origine, même filtre), au-dessus des repères */}
+          {loupe && lens && (() => {
+            const size = (lens.touch ? 150 : 200) / zoom; // taille constante à l'écran malgré le zoom de la vue
+            const left = lens.x - size / 2;
+            const top = lens.touch ? lens.y - size - 24 / zoom : lens.y - size / 2;
+            const targetX = size / 2;
+            const targetY = size / 2;
+            return (
+              <div
+                aria-hidden="true"
+                className="absolute z-30 rounded-full shadow-2xl pointer-events-none bg-no-repeat"
+                style={{
+                  width: size,
+                  height: size,
+                  left,
+                  top,
+                  border: `${4 / zoom}px solid white`,
+                  backgroundImage: `url("${document.fileData}")`,
+                  backgroundSize: `${lens.w * loupeZoom}px ${lens.h * loupeZoom}px`,
+                  backgroundPosition: `${targetX - lens.x * loupeZoom}px ${targetY - lens.y * loupeZoom}px`,
+                  backgroundColor: '#1c1917',
+                  // Fond positionné depuis le bord extérieur : le point visé tombe au centre malgré la bordure
+                  backgroundOrigin: 'border-box',
+                  filter: imageFilter,
+                }}
+              >
+                <span
+                  className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/80 bg-amber-500/60"
+                  style={{ left: targetX - 4 / zoom, top: targetY - 4 / zoom, width: 8 / zoom, height: 8 / zoom }}
+                />
+              </div>
+            );
+          })()}
 
           {/* Render Photo Tags Overlay */}
           {showTags && tags.map((tag, idx) => {
