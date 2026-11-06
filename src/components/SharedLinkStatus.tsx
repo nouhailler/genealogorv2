@@ -10,13 +10,13 @@ interface SharedLinkStatusProps {
 const CONTENT = {
   loading: {
     icon: RotateCcw,
-    title: 'Ouverture de l\'arbre partagé…',
+    title: 'Ouverture du lien partagé…',
     text: 'Récupération et déchiffrement de la copie partagée.',
   },
   missing: {
     icon: Link2Off,
     title: 'Lien de partage introuvable',
-    text: 'Ce lien a été révoqué par le créateur de l\'arbre, ou il est incomplet. Demandez-lui un nouveau lien.',
+    text: 'Ce lien a été révoqué par son créateur, ou il est incomplet. Demandez-lui un nouveau lien.',
   },
   'no-key': {
     icon: KeyRound,
@@ -25,7 +25,7 @@ const CONTENT = {
   },
   error: {
     icon: AlertTriangle,
-    title: 'Impossible d\'ouvrir cet arbre',
+    title: 'Impossible d\'ouvrir ce lien',
     text: 'Le lien semble modifié ou incomplet.',
   },
 };

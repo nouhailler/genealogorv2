@@ -164,6 +164,7 @@ Pour les utilisateurs novices ou nomades explorant les fonds d'archives départe
 - **Liaison instantanée avec l'arbre** : Recherche prédictive pour relier le visage à une fiche individuelle existante.
 - **Section dédiée sur la fiche individu** : La fiche biographique récapitule tous les clichés d'archives où la personne est identifiée.
 - **Filtres paléographiques** : Contraste élevé, négatif, niveaux de gris et convertisseur républicain (An II – An XIV).
+- **Partage d'une photo par lien** : bouton « Partager cette photo » sur une archive image ; le destinataire voit la photo, ses repères numérotés et la liste des personnes, sans compte (voir [Partage d'une photo étiquetée par lien](#partage-dune-photo-étiquetée-par-lien)).
 
 ---
 
@@ -268,6 +269,18 @@ Le routage monopage (retour à `index.html` pour toute URL, ex. `/?room=famille-
 Chaque ajout, modification ou suppression de fiche, modification d'union, ajout ou modification d'archive et chaque personne identifiée sur une photo est consigné dans un journal (100 derniers événements, `change-log.ts`). Ce journal accompagne la copie partagée : les personnes qui consultent un lien voient un **bandeau d'alertes** épinglé sous la barre de navigation, mis à jour en direct, avec le nombre de modifications non lues. Un clic sur une alerte ouvre directement la fiche ou l'archive concernée ; « Tout marquer comme lu » vide le bandeau. Un import GEDCOM ou une restauration produit une seule alerte de synthèse. Les alertes respectent la branche partagée et l'anonymisation des vivants ; le créateur ne reçoit pas d'alerte pour ses propres modifications.
 
 Les images des archives ne sont pas incluses dans la copie partagée (limite de 1 Mo par document Firestore ; un arbre de ~500 personnes occupe environ 60 Ko).
+
+#### Partage d'une photo étiquetée par lien
+
+Sur une archive contenant une image, le créateur connecté avec Google clique sur **Partager cette photo** puis **Créer le lien**. Le destinataire ouvre `https://…/?share=<jeton>#k=<clé>` sans compte et voit une page dédiée : la photo, ses repères numérotés (mêmes numéros que dans l'application), la liste des personnes avec leurs années de vie et la précision saisie (« Le marié »…). Survoler un repère met la personne en évidence dans la liste, et inversement.
+
+- **Contenu** : seulement la photo et les personnes étiquetées, jamais l'arbre. Même stockage et même chiffrement que les liens d'arbre (`/shares/<jeton>`, AES-GCM, clé dans le fragment `#`).
+- **Image allégée** : redimensionnée (1600 px de côté au plus, réduite davantage si besoin) et recompressée en JPEG dans le navigateur pour tenir dans un document Firestore. L'original de l'archive n'est pas modifié.
+- **Personnes vivantes** : masquées par défaut ; leur repère reste visible avec « Personne vivante » à la place du nom, sans dates ni précision.
+- **Instantané** : le lien montre la photo telle qu'au moment de la publication. Après avoir ajouté des étiquettes, rouvrir **Partager cette photo** → **Mettre à jour** (le lien ne change pas).
+- **Révocation** : bouton **Révoquer**, ou suppression de l'archive.
+- **Limite** : les liens photo sont mémorisés sur l'appareil qui les a créés (la clé n'est jamais publiée) ; leur mise à jour et leur révocation se font depuis cet appareil.
+- Aucun changement des règles Firestore n'est nécessaire.
 
 #### Déployer les règles Firestore (obligatoire une fois)
 

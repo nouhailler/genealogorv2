@@ -3,12 +3,14 @@ import {
   FileText, Upload, ZoomIn, ZoomOut, RotateCw, Contrast, 
   Search, Filter, Plus, Calendar, MapPin, Building, 
   Link as LinkIcon, User, Users, Trash2, Edit2, Download,
-  CheckCircle, BookOpen, Eye, X, Image as ImageIcon
+  CheckCircle, BookOpen, Eye, X, Image as ImageIcon, Share2
 } from 'lucide-react';
 import { ArchiveDocument, ArchiveDocumentType, GenealogyData, Individual, PhotoTag } from '../../types/genealogy';
 import { parseRepublicanDate } from '../../lib/republican-calendar';
 import { PhotoTagger } from '../PhotoTagger';
 import { normalize } from '../../lib/place-gazetteer';
+import { PhotoShareModal, PhotoShareControls } from '../PhotoShareModal';
+import { isShareableImage } from '../../lib/photo-share';
 
 interface ArchivesViewProps {
   archives: ArchiveDocument[];
@@ -18,6 +20,8 @@ interface ArchivesViewProps {
   onUpdateArchive?: (doc: ArchiveDocument) => void;
   onDeleteArchive?: (id: string) => void;
   onSelectPerson: (personId: string) => void;
+  /** Partage d'une photo étiquetée par lien (créateur uniquement) */
+  photoShare?: PhotoShareControls;
 }
 
 const TYPE_LABELS: Record<ArchiveDocumentType, { label: string; color: string }> = {
@@ -42,7 +46,9 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
   onUpdateArchive,
   onDeleteArchive,
   onSelectPerson,
+  photoShare,
 }) => {
+  const [isPhotoShareOpen, setIsPhotoShareOpen] = useState(false);
   const [selectedDocId, setSelectedDocId] = useState<string>(selectedArchiveId || archives[0]?.id || '');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -622,6 +628,18 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {photoShare && isShareableImage(selectedDoc) && (
+                    <button
+                      onClick={() => setIsPhotoShareOpen(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-900 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-lg shadow-2xs cursor-pointer"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>Partager cette photo</span>
+                      {photoShare.records.some(r => r.archiveId === selectedDoc.id) && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Un lien est déjà actif" />
+                      )}
+                    </button>
+                  )}
                   {onUpdateArchive && (
                     <button
                       onClick={() => handleStartEdit(selectedDoc)}
@@ -645,6 +663,14 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
                   )}
                 </div>
               </div>
+
+              {isPhotoShareOpen && photoShare && (
+                <PhotoShareModal
+                  {...photoShare}
+                  archive={selectedDoc}
+                  onClose={() => setIsPhotoShareOpen(false)}
+                />
+              )}
 
               {/* High-Definition Visualizer Container with Photo Tagging */}
               <div className="px-6">

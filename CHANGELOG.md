@@ -3,6 +3,15 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.20.0] — 2026-11-06
+
+### 🔗 Ajouté — Partager une photo étiquetée par lien
+- Archives : bouton « Partager cette photo » sur une archive contenant une image (créateur connecté avec Google). Il crée un lien `?share=…#k=…` à envoyer.
+- Le destinataire, sans compte, voit une page dédiée : la photo, ses repères numérotés, la liste des personnes (années de vie, précision saisie) ; survol synchronisé entre repères et liste ; affichage mobile.
+- Seules la photo et les personnes étiquetées sont partagées, chiffrées comme les liens d'arbre. L'image est allégée dans le navigateur (1600 px au plus, JPEG) pour tenir dans Firestore ; l'original n'est pas modifié.
+- Personnes vivantes masquées par défaut (« Personne vivante »). Boutons « Mettre à jour » (après ajout d'étiquettes) et « Révoquer » ; la suppression de l'archive révoque ses liens.
+- Tests `photo-share.test.ts` (numérotation, masquage des vivants, chiffrement, réduction progressive de l'image).
+
 ## [2.19.5] — 2026-11-06
 
 ### 🛟 Corrigé — Le serveur s'arrêtait sur un document trop volumineux

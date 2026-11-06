@@ -43,6 +43,18 @@ import {
   SHARE_FORMAT_VERSION,
   ShareDocument,
 } from './lib/share-snapshot';
+import {
+  PhotoShareRecord,
+  PhotoShareSnapshot,
+  isPhotoSnapshot,
+  sealPhotoSnapshot,
+  newPhotoShareCredentials,
+  buildPhotoShareDocument,
+  getPhotoShareRecords,
+  savePhotoShareRecords,
+  upsertPhotoShareRecord,
+} from './lib/photo-share';
+import { SharedPhotoView } from './components/SharedPhotoView';
 import { FanChartView } from './components/views/FanChartView';
 import { DescendantsView } from './components/views/DescendantsView';
 import { ImplexView } from './components/views/ImplexView';
@@ -123,6 +135,7 @@ type SharedViewState =
   | { status: 'loading' }
   | { status: 'locked'; doc: ShareDocument }
   | { status: 'ready'; title: string; shareName: string; generatedAt: string }
+  | { status: 'photo'; snapshot: PhotoShareSnapshot }
   | { status: 'missing' | 'no-key' | 'error'; message?: string };
 
 export default function App() {
@@ -196,6 +209,12 @@ export default function App() {
   };
 
   // Access control & Private branch links
+  // Liens de partage de photos étiquetées créés sur cet appareil (clés locales, jamais relayées)
+  const [photoShareRecords, setPhotoShareRecords] = useState<PhotoShareRecord[]>(() => getPhotoShareRecords(roomId));
+  useEffect(() => {
+    setPhotoShareRecords(getPhotoShareRecords(roomId));
+  }, [roomId]);
+
   const [accessList, setAccessList] = useState<BranchAccess[]>(() => {
     const res = getVersionedItem<BranchAccess[]>(`${STORAGE_KEYS.ACCESS}_${roomId}`, []);
     return res.data;
@@ -969,7 +988,66 @@ export default function App() {
       console.warn('Firestore delete fallback', e);
     }
 
+    // Les liens photo de ce document ne doivent pas lui survivre
+    for (const record of photoShareRecords.filter(r => r.archiveId === id)) {
+      try {
+        await handleRevokePhotoShare(record);
+      } catch (e) {
+        console.warn('Révocation du lien photo impossible :', e);
+      }
+    }
+
     showToast('Acte supprimé du fonds d\'archives.');
+  };
+
+  const handlePublishPhotoShare = async (
+    archive: ArchiveDocument,
+    hideLiving: boolean,
+    existing?: PhotoShareRecord
+  ): Promise<PhotoShareRecord> => {
+    if (!currentUser) throw new Error('Connexion Google requise pour publier un lien de partage.');
+    const { token, key } = existing || newPhotoShareCredentials();
+    const payload = await sealPhotoSnapshot(archive, data, hideLiving, key);
+    try {
+      await publishShareToFirestore(token, buildPhotoShareDocument(roomId, currentUser.uid, payload), currentUser);
+    } catch (e) {
+      console.warn('Publication du lien photo impossible :', e);
+      throw new Error('Publication refusée par Firestore. Vérifiez votre connexion Google et le déploiement des règles Firestore (collection « shares »).');
+    }
+    const now = new Date().toISOString();
+    const record: PhotoShareRecord = {
+      token,
+      key,
+      archiveId: archive.id,
+      archiveTitle: archive.title,
+      hideLiving,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    };
+    setPhotoShareRecords(prev => {
+      const next = upsertPhotoShareRecord(prev, record);
+      savePhotoShareRecords(roomId, next);
+      return next;
+    });
+    showToast(existing ? 'Lien de la photo mis à jour.' : 'Lien de la photo créé : copiez-le pour l\'envoyer.');
+    return record;
+  };
+
+  const handleRevokePhotoShare = async (record: PhotoShareRecord): Promise<void> => {
+    // Sans session, la suppression Firestore serait ignorée et le lien resterait actif
+    if (!currentUser) throw new Error('Connexion Google requise pour révoquer un lien de partage.');
+    try {
+      await deleteShareFromFirestore(record.token, currentUser);
+    } catch (e) {
+      console.warn('Révocation du lien photo impossible :', e);
+      throw new Error('Révocation refusée par Firestore. Vérifiez votre connexion et réessayez.');
+    }
+    setPhotoShareRecords(prev => {
+      const next = prev.filter(r => r.token !== record.token);
+      savePhotoShareRecords(roomId, next);
+      return next;
+    });
+    showToast('Lien de la photo révoqué.');
   };
 
   const handleLoadGedcom = async (newData: GenealogyData) => {
@@ -1225,6 +1303,11 @@ export default function App() {
 
   const applySharedSnapshot = async (shareDoc: ShareDocument, key: string) => {
     const snapshot = await openSnapshot(shareDoc.payload, key);
+    // Lien photo : page dédiée, sans arbre
+    if (isPhotoSnapshot(snapshot)) {
+      setSharedView({ status: 'photo', snapshot });
+      return;
+    }
     const tree = { ...snapshot.tree, sourceHeader: snapshot.title };
     setData(tree);
     setArchives(snapshot.archives);
@@ -1262,7 +1345,7 @@ export default function App() {
         try {
           await applySharedSnapshot(shareDoc, sharedKeyRef.current);
         } catch (e) {
-          setSharedView({ status: 'error', message: 'La clé du lien ne permet pas de déchiffrer cet arbre (lien incomplet ou modifié).' });
+          setSharedView({ status: 'error', message: 'La clé du lien ne permet pas de déchiffrer ce contenu (lien incomplet ou modifié).' });
         }
       },
       () => setSharedView({ status: 'missing' })
@@ -1290,6 +1373,9 @@ export default function App() {
           onUnlock={handleUnlockShare}
         />
       );
+    }
+    if (sharedView.status === 'photo') {
+      return <SharedPhotoView snapshot={sharedView.snapshot} />;
     }
     if (sharedView.status !== 'ready') {
       return <SharedLinkStatus status={sharedView.status} message={'message' in sharedView ? sharedView.message : undefined} />;
@@ -1527,6 +1613,13 @@ export default function App() {
             onAddArchive={userRole === 'admin' ? handleAddArchive : undefined}
             onUpdateArchive={userRole === 'admin' ? handleUpdateArchive : undefined}
             onDeleteArchive={userRole === 'admin' ? handleDeleteArchive : undefined}
+            photoShare={userRole === 'admin' && !isSharedView ? {
+              records: photoShareRecords,
+              onPublish: handlePublishPhotoShare,
+              onRevoke: handleRevokePhotoShare,
+              isCloudReady: !!currentUser,
+              onLogin: handleLogin,
+            } : undefined}
             onSelectPerson={(pId) => {
               setSelectedPersonId(pId);
               setActiveTab('profile');
