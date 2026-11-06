@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Calendar, CalendarPlus, MapPin, Eye, EyeOff, UserPlus, Send, Pencil, Trash2, CheckCircle2, X, Loader2, Search } from 'lucide-react';
+import { Calendar, CalendarPlus, MapPin, Eye, EyeOff, UserPlus, Send, Trash2, CheckCircle2, X, Loader2, Search } from 'lucide-react';
 import { Logo } from './Logo';
 import { PhotoShareSnapshot, LIVING_PLACEHOLDER } from '../lib/photo-share';
 import { ProposalItem, ProposalSubmission, DateProposal, PROPOSAL_LIMITS } from '../lib/photo-proposals';
@@ -213,6 +213,79 @@ export const SharedPhotoView: React.FC<SharedPhotoViewProps> = ({ snapshot, onSu
           </form>
         )}
 
+        {/* Récapitulatif et envoi : au niveau des boutons, pour ne pas passer inaperçu */}
+        {onSubmitProposals && (items.length > 0 || dateProposal) && (
+          <section
+            aria-label="Vos propositions"
+            className="bg-amber-50/80 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl p-3 space-y-2"
+          >
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-bold mr-1">Vos propositions ({items.length + (dateProposal ? 1 : 0)}) :</span>
+              {items.map((it, i) => (
+                <span key={i} className="inline-flex items-center max-w-full rounded-full border border-dashed border-amber-400 bg-white dark:bg-[#1A1D24] text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => { setProposing(true); setDraft({ index: i, x: it.x, y: it.y, name: it.name, details: it.details || '' }); }}
+                    title={it.details ? `${it.name} — ${it.details} (cliquer pour modifier)` : `${it.name} (cliquer pour modifier)`}
+                    className="pl-2 pr-1 py-0.5 truncate max-w-[14rem] text-left"
+                  >
+                    <span className="font-mono font-bold text-amber-800 dark:text-amber-400 mr-1">P{i + 1}</span>{it.name}
+                  </button>
+                  <button type="button" onClick={() => removeItem(i)} aria-label={`Retirer P${i + 1}`} className="pr-1.5 pl-0.5 text-stone-400 hover:text-rose-700">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+              {dateProposal && (
+                <span className="inline-flex items-center max-w-full rounded-full border border-dashed border-amber-400 bg-white dark:bg-[#1A1D24] text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setDateForm(dateProposal)}
+                    title={dateProposal.note ? `${dateProposal.value} — ${dateProposal.note} (cliquer pour modifier)` : `${dateProposal.value} (cliquer pour modifier)`}
+                    className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 truncate max-w-[14rem]"
+                  >
+                    <CalendarPlus className="w-3 h-3 text-amber-800 dark:text-amber-400 shrink-0" />{dateProposal.value}
+                  </button>
+                  <button type="button" onClick={() => setDateProposal(null)} aria-label="Retirer la date proposée" className="pr-1.5 pl-0.5 text-stone-400 hover:text-rose-700">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <input
+                value={proposer}
+                onChange={e => setProposer(e.target.value)}
+                maxLength={PROPOSAL_LIMITS.PROPOSER}
+                placeholder="Votre prénom (facultatif)"
+                aria-label="Votre prénom"
+                className="sm:w-44 text-xs bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-700"
+              />
+              <input
+                value={comment}
+                onChange={e => setComment(e.target.value)}
+                maxLength={PROPOSAL_LIMITS.COMMENT}
+                placeholder="Un mot pour l'administrateur (facultatif)"
+                aria-label="Commentaire"
+                className="flex-1 min-w-0 text-xs bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-700"
+              />
+              <button
+                type="button"
+                onClick={send}
+                disabled={sending}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-amber-900 hover:bg-amber-950 rounded-lg shadow-sm disabled:opacity-50 shrink-0"
+              >
+                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                {sending ? 'Envoi…' : `Envoyer à l'administrateur`}
+              </button>
+            </div>
+            <p className="text-[10px] text-stone-500 dark:text-stone-400">
+              Cliquez sur une proposition pour la modifier. L'administrateur validera chacune avant qu'elle n'apparaisse ; vos propositions sont chiffrées.
+            </p>
+          </section>
+        )}
+        {sendError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-400">{sendError}</p>}
+
         {sentCount !== null && (
           <div role="status" className="flex items-start gap-2 p-3 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 text-sm text-emerald-900 dark:text-emerald-200">
             <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
@@ -414,86 +487,6 @@ export const SharedPhotoView: React.FC<SharedPhotoViewProps> = ({ snapshot, onSu
           </div>
         </div>
 
-        {/* Récapitulatif et envoi */}
-        {onSubmitProposals && (items.length > 0 || dateProposal) && (
-          <section className="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/60 rounded-2xl p-4 sm:p-5 space-y-3">
-            <h2 className="font-serif text-lg font-bold">Vos propositions ({items.length + (dateProposal ? 1 : 0)})</h2>
-            {dateProposal && (
-              <div className="flex items-start justify-between gap-2 p-2 rounded-lg bg-white dark:bg-[#1A1D24] border border-amber-100 dark:border-amber-900/40">
-                <span className="flex items-start gap-2 min-w-0">
-                  <CalendarPlus className="w-4 h-4 shrink-0 mt-0.5 text-amber-800 dark:text-amber-400" />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold break-words">Date de la photo : {dateProposal.value}</span>
-                    {dateProposal.note && <span className="block text-xs text-stone-600 dark:text-stone-400 break-words">{dateProposal.note}</span>}
-                  </span>
-                </span>
-                <span className="flex items-center gap-1 shrink-0">
-                  <button type="button" onClick={() => setDateForm(dateProposal)} aria-label="Modifier la date proposée" className="p-1 text-stone-500 hover:text-stone-800">
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  <button type="button" onClick={() => setDateProposal(null)} aria-label="Retirer la date proposée" className="p-1 text-stone-500 hover:text-rose-700">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </span>
-              </div>
-            )}
-            <ol className="space-y-1.5">
-              {items.map((it, i) => (
-                <li key={i} className="flex items-start justify-between gap-2 p-2 rounded-lg bg-white dark:bg-[#1A1D24] border border-amber-100 dark:border-amber-900/40">
-                  <span className="flex items-start gap-2 min-w-0">
-                    <span className="w-7 h-6 shrink-0 rounded-full border-2 border-dashed border-amber-400 text-amber-900 dark:text-amber-300 text-[10px] font-bold font-mono flex items-center justify-center">P{i + 1}</span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold break-words">{it.name}</span>
-                      {it.details && <span className="block text-xs text-stone-600 dark:text-stone-400 break-words">{it.details}</span>}
-                    </span>
-                  </span>
-                  <span className="flex items-center gap-1 shrink-0">
-                    <button type="button" onClick={() => { setProposing(true); setDraft({ index: i, x: it.x, y: it.y, name: it.name, details: it.details || '' }); }} aria-label={`Modifier P${i + 1}`} className="p-1 text-stone-500 hover:text-stone-800">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button type="button" onClick={() => removeItem(i)} aria-label={`Retirer P${i + 1}`} className="p-1 text-stone-500 hover:text-rose-700">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </span>
-                </li>
-              ))}
-            </ol>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <input
-                value={proposer}
-                onChange={e => setProposer(e.target.value)}
-                maxLength={PROPOSAL_LIMITS.PROPOSER}
-                placeholder="Votre prénom (facultatif)"
-                aria-label="Votre prénom"
-                className="text-xs bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-amber-700"
-              />
-              <input
-                value={comment}
-                onChange={e => setComment(e.target.value)}
-                maxLength={PROPOSAL_LIMITS.COMMENT}
-                placeholder="Un mot pour l'administrateur (facultatif)"
-                aria-label="Commentaire"
-                className="text-xs bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-amber-700"
-              />
-            </div>
-            {sendError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-400">{sendError}</p>}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-[11px] text-stone-600 dark:text-stone-400">
-                L'administrateur de l'arbre validera chaque proposition avant qu'elle n'apparaisse. Vos propositions sont chiffrées.
-              </p>
-              <button
-                type="button"
-                onClick={send}
-                disabled={sending}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-amber-900 hover:bg-amber-950 rounded-lg shadow-sm disabled:opacity-50"
-              >
-                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                {sending ? 'Envoi…' : `Envoyer à l'administrateur`}
-              </button>
-            </div>
-          </section>
-        )}
-        {sendError && items.length === 0 && !dateProposal && <p role="alert" className="text-xs text-rose-700 dark:text-rose-400">{sendError}</p>}
 
         <section className="bg-white dark:bg-[#1A1D24] border border-stone-200 dark:border-stone-800 rounded-2xl p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3 mb-3">

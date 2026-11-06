@@ -3,6 +3,12 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.24.2] — 2026-11-06
+
+### 📤 Modifié — Zone d'envoi des propositions sous les boutons
+- Photo partagée : « Vos propositions » et le bouton **« Envoyer à l'administrateur »** sont désormais juste sous « Proposer une identification » et « Proposer une date », au-dessus de la photo, au lieu d'être en bas de page où on ne pensait pas à regarder.
+- Présentation compacte pour ne pas repousser la photo pendant qu'on identifie : chaque proposition est une étiquette (P1, P2, date) — un clic la modifie, la croix la retire — et prénom, commentaire et envoi tiennent sur une ligne (empilés sur téléphone).
+
 ## [2.24.1] — 2026-11-06
 
 ### 🔎 Ajouté — Loupe sur les photos dans Genealogor
