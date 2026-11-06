@@ -38,6 +38,8 @@ interface NavbarProps {
   onLogin: () => void;
   onLogout: () => void;
   isCloudSynced: boolean;
+  /** Propositions d'identification reçues et pas encore examinées (pastille sur « Archives & Actes ») */
+  pendingProposalsCount?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -59,6 +61,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogin,
   onLogout,
   isCloudSynced,
+  pendingProposalsCount = 0,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-[#FBF9F5]/95 dark:bg-[#121418]/95 backdrop-blur-md border-b border-stone-200/80 dark:border-stone-800 px-4 md:px-8 py-2.5 transition-colors duration-200">
@@ -229,9 +232,18 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
         <button
           onClick={() => onTabChange('archives')}
-          className={`px-2.5 py-1 rounded-md whitespace-nowrap ${activeTab === 'archives' ? 'font-bold text-amber-950 dark:text-amber-200 bg-amber-100/70 dark:bg-amber-950/60' : 'text-stone-600 dark:text-stone-400'}`}
+          aria-label={pendingProposalsCount > 0 ? `Archives & Actes, ${pendingProposalsCount} proposition(s) d'identification à examiner` : undefined}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md whitespace-nowrap ${activeTab === 'archives' ? 'font-bold text-amber-950 dark:text-amber-200 bg-amber-100/70 dark:bg-amber-950/60' : 'text-stone-600 dark:text-stone-400'}`}
         >
           Archives & Actes
+          {pendingProposalsCount > 0 && (
+            <span
+              title={`${pendingProposalsCount} proposition(s) d'identification à examiner`}
+              className="min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold leading-[1.125rem] text-center"
+            >
+              {pendingProposalsCount > 99 ? '99+' : pendingProposalsCount}
+            </span>
+          )}
         </button>
         <button
           onClick={() => onTabChange('timeline')}

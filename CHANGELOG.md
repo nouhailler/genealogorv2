@@ -3,6 +3,12 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.22.1] — 2026-11-06
+
+### 🔴 Ajouté — Compteur de propositions sur l'onglet « Archives & Actes »
+- Une pastille rouge indique le nombre de propositions d'identification reçues et pas encore examinées. Elle augmente à chaque nouvel envoi et diminue à chaque proposition associée, mise de côté (« à créer plus tard ») ou refusée.
+- Visible seulement par le créateur de l'arbre connecté avec Google ; lisible par les lecteurs d'écran (« Archives & Actes, 3 proposition(s) d'identification à examiner »).
+
 ## [2.22.0] — 2026-11-06
 
 ### 🙋 Ajouté — Propositions d'identification sur les photos partagées

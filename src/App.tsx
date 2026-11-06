@@ -1637,6 +1637,7 @@ export default function App() {
           onLogin={handleLogin}
           onLogout={handleLogout}
           isCloudSynced={isCloudSynced}
+          pendingProposalsCount={userRole === 'admin' && !isSharedView ? proposalTotal : 0}
         />
 
         {/* Alertes : modifications de l'arbre non encore vues, cliquables */}
