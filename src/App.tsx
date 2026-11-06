@@ -75,7 +75,17 @@ import {
 
 import { GenealogyData, Individual, ArchiveDocument, BranchAccess, BranchRole, BranchScope } from './types/genealogy';
 import { createEmptyGenealogy } from './lib/sample-data';
-import { getStoredArchives, saveStoredArchives, clearStoredArchives } from './lib/archive-store';
+import { clearStoredArchives } from './lib/archive-store';
+import {
+  persistArchives,
+  loadMissingImages,
+  attachImages,
+  deleteArchiveImages,
+  mergeRemoteArchives,
+  getCloudArchiveIds,
+  saveCloudArchiveIds,
+} from './lib/archive-persistence';
+import { requestPersistentStorage } from './lib/image-store';
 import { filterGenealogyData } from './lib/branch-filter';
 import { realtimeClient, isJsonResponse, isTooLargeForRealtime } from './lib/realtime-client';
 import { verifyPassword } from './lib/crypto';
@@ -164,6 +174,28 @@ export default function App() {
     const res = getVersionedItem<ArchiveDocument[]>(roomKey, []);
     return res.data;
   });
+
+  // Images des archives : conservées dans IndexedDB, rechargées après le démarrage ou un changement d'arbre
+  const archivesRef = React.useRef(archives);
+  archivesRef.current = archives;
+  const triedImageIdsRef = React.useRef<Set<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    loadMissingImages(archives, triedImageIdsRef.current)
+      .then(images => {
+        if (!cancelled && images.size > 0) setArchives(prev => attachImages(prev, images));
+      })
+      .catch(e => console.warn('Lecture des images d\'archives impossible :', e));
+    return () => { cancelled = true; };
+  }, [archives]);
+  useEffect(() => {
+    requestPersistentStorage();
+    if (isSharedView) return;
+    // Migration : déplace vers IndexedDB les images encore stockées dans le localStorage
+    if (archivesRef.current.some(a => a.fileData)) persistArchives(roomId, archivesRef.current);
+    // Ancienne copie « miroir » des archives, jamais relue : elle doublait l'espace occupé
+    try { localStorage.removeItem(STORAGE_KEYS.ARCHIVES); } catch (e) {}
+  }, []);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('tree');
   const [selectedPersonId, setSelectedPersonId] = useState<string>(() => data.rootPersonId || Object.keys(data.individuals)[0] || '');
@@ -483,10 +515,19 @@ export default function App() {
 
     const unsubArch = subscribeToArchives(roomId, (remoteArchives) => {
       if (remoteArchives) {
-        setArchives(remoteArchives);
-        setVersionedItem(`${STORAGE_KEYS.ARCHIVES}_${roomId}`, remoteArchives);
-        setVersionedItem(STORAGE_KEYS.ARCHIVES, remoteArchives);
+        // Fusion sans perte : images locales conservées, archives jamais arrivées dans le cloud gardées
+        const cloudIds = getCloudArchiveIds(roomId);
+        const { merged, toUpload } = mergeRemoteArchives(remoteArchives, archivesRef.current, cloudIds);
+        remoteArchives.forEach(a => cloudIds.add(a.id));
+        saveCloudArchiveIds(roomId, cloudIds);
+        setArchives(merged);
+        persistArchives(roomId, merged);
         setIsCloudSynced(true);
+        for (const archive of toUpload) {
+          saveArchiveToFirestore(roomId, archive, currentUser).catch(e =>
+            console.warn(`Envoi de l'archive « ${archive.title} » vers le cloud impossible :`, e)
+          );
+        }
       }
     });
 
@@ -698,11 +739,9 @@ export default function App() {
           const sanitizedList = sanitizeArchivesForPrivacy([newArchive], protectedIds);
           if (sanitizedList.length === 0) return; // Ne pas intégrer l'archive privée
         }
-        setArchives(prev => {
-          const next = [newArchive, ...prev.filter(a => a.id !== newArchive.id)];
-          setVersionedItem(STORAGE_KEYS.ARCHIVES, next);
-          return next;
-        });
+        const next = [newArchive, ...archivesRef.current.filter(a => a.id !== newArchive.id)];
+        setArchives(next);
+        persistArchives(roomId, next);
         showToast(`Nouvel acte numérisé ajouté : ${newArchive.title}`);
       }
     });
@@ -922,8 +961,7 @@ export default function App() {
 
     const nextArchives = [newDoc, ...archives];
     setArchives(nextArchives);
-    setVersionedItem(`${STORAGE_KEYS.ARCHIVES}_${roomId}`, nextArchives);
-    setVersionedItem(STORAGE_KEYS.ARCHIVES, nextArchives);
+    persistArchives(roomId, nextArchives);
     realtimeClient.sendAction('archive:add', newDoc);
 
     if (!isWsConnected && isRelayAvailable && !isTooLargeForRealtime(newDoc)) {
@@ -948,8 +986,7 @@ export default function App() {
 
     const nextArchives = archives.map(a => a.id === updated.id ? updated : a);
     setArchives(nextArchives);
-    setVersionedItem(`${STORAGE_KEYS.ARCHIVES}_${roomId}`, nextArchives);
-    setVersionedItem(STORAGE_KEYS.ARCHIVES, nextArchives);
+    persistArchives(roomId, nextArchives);
     realtimeClient.sendAction('archive:add', updated);
 
     if (!isWsConnected && isRelayAvailable && !isTooLargeForRealtime(updated)) {
@@ -974,8 +1011,8 @@ export default function App() {
 
     const nextArchives = archives.filter(a => a.id !== id);
     setArchives(nextArchives);
-    setVersionedItem(`${STORAGE_KEYS.ARCHIVES}_${roomId}`, nextArchives);
-    setVersionedItem(STORAGE_KEYS.ARCHIVES, nextArchives);
+    persistArchives(roomId, nextArchives);
+    deleteArchiveImages([id]);
     realtimeClient.sendAction('archive:delete', id);
 
     if (!isWsConnected && isRelayAvailable) {
@@ -1100,8 +1137,7 @@ export default function App() {
 
     setVersionedItem(`${STORAGE_KEYS.TREE}_${roomId}`, payload.genealogy);
     setVersionedItem(STORAGE_KEYS.TREE, payload.genealogy);
-    setVersionedItem(`${STORAGE_KEYS.ARCHIVES}_${roomId}`, payload.archives);
-    setVersionedItem(STORAGE_KEYS.ARCHIVES, payload.archives);
+    persistArchives(roomId, payload.archives);
     setVersionedItem(`${STORAGE_KEYS.ACCESS}_${roomId}`, payload.accessList);
     setVersionedItem(STORAGE_KEYS.ACCESS, payload.accessList);
 
@@ -1164,13 +1200,12 @@ export default function App() {
     setSelectedArchiveId('');
 
     const roomTreeKey = `${STORAGE_KEYS.TREE}_${roomId}`;
-    const roomArchKey = `${STORAGE_KEYS.ARCHIVES}_${roomId}`;
     const roomAccessKey = `${STORAGE_KEYS.ACCESS}_${roomId}`;
 
     setVersionedItem(roomTreeKey, emptyTree);
     setVersionedItem(STORAGE_KEYS.TREE, emptyTree);
-    setVersionedItem(roomArchKey, emptyArchives);
-    setVersionedItem(STORAGE_KEYS.ARCHIVES, emptyArchives);
+    deleteArchiveImages(archives.map(a => a.id));
+    persistArchives(roomId, emptyArchives);
     setVersionedItem(roomAccessKey, emptyAccess);
     setVersionedItem(STORAGE_KEYS.ACCESS, emptyAccess);
     clearStoredArchives();

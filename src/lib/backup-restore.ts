@@ -1,3 +1,4 @@
+import { stripArchiveImages } from './archive-persistence';
 import { GenealogyData, ArchiveDocument, BranchAccess } from '../types/genealogy';
 import { STORAGE_KEYS } from './storage-manager';
 import { encryptData, decryptData } from './crypto';
@@ -275,7 +276,8 @@ export async function restoreBackup(
   // Créer la sauvegarde pré-restauration de sécurité
   if (typeof localStorage !== 'undefined') {
     try {
-      const preRestoreSafety = await createFullBackup(currentGenealogy, currentArchives, currentAccess);
+      // Sans les images (conservées dans IndexedDB) : sinon cette copie saturait le localStorage
+      const preRestoreSafety = await createFullBackup(currentGenealogy, stripArchiveImages(currentArchives), currentAccess);
       localStorage.setItem(STORAGE_KEYS.PRE_RESTORE_BACKUP, preRestoreSafety);
     } catch (e) {
       console.warn('Impossible de créer la sauvegarde pré-restauration', e);

@@ -164,6 +164,7 @@ Pour les utilisateurs novices ou nomades explorant les fonds d'archives départe
 - **Liaison instantanée avec l'arbre** : Recherche prédictive pour relier le visage à une fiche individuelle existante.
 - **Section dédiée sur la fiche individu** : La fiche biographique récapitule tous les clichés d'archives où la personne est identifiée.
 - **Filtres paléographiques** : Contraste élevé, négatif, niveaux de gris et convertisseur républicain (An II – An XIV).
+- **Photos conservées d'une version à l'autre** : les images sont enregistrées dans IndexedDB (pas de limite pratique de taille), les métadonnées et étiquettes dans le `localStorage`. Connecté avec Google, une image de plus de ~900 Ko reste sur l'appareil : seules ses métadonnées et étiquettes vont dans Firestore (limite de 1 Mo par document).
 - **Partage d'une photo par lien** : bouton « Partager cette photo » sur une archive image ; le destinataire voit la photo, ses repères numérotés et la liste des personnes, sans compte (voir [Partage d'une photo étiquetée par lien](#partage-dune-photo-étiquetée-par-lien)).
 
 ---

@@ -3,6 +3,17 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.20.1] — 2026-11-06
+
+### 🖼️ Corrigé — Les photos disparaissaient après une mise à jour ou un rechargement
+- **Cause 1, navigateur** : chaque photo était enregistrée en entier dans le `localStorage`, et en double. Ce stockage est limité à ~5 Mo par site : au-delà, l'écriture échouait sans message et la photo n'était jamais vraiment sauvegardée.
+- **Cause 2, cloud** : connecté avec Google, une archive avec une photo de plus de 1 Mo était refusée en entier par Firestore ; au chargement suivant, la liste du cloud (sans elle) remplaçait la liste locale.
+- Les images sont désormais enregistrées dans IndexedDB (stockage du navigateur prévu pour les gros fichiers) ; le `localStorage` ne garde que les métadonnées et les étiquettes. Les photos déjà présentes y sont déplacées automatiquement au premier lancement, et l'ancienne copie en double est supprimée.
+- Firestore reçoit l'archive sans l'image quand celle-ci ferait dépasser la limite : titre, date et étiquettes sont synchronisés, l'image reste sur l'appareil.
+- La fusion avec le cloud ne supprime plus une archive locale qui n'y est jamais arrivée (elle est conservée et envoyée) et garde l'image locale quand le cloud n'en a pas. Une archive supprimée depuis un autre appareil est toujours retirée.
+- La suppression d'une archive ou d'un arbre efface aussi ses images ; la sauvegarde de sécurité avant restauration n'inclut plus les images (elles restent dans IndexedDB).
+- Tests `archive-persistence.test.ts`. Vérifié dans le navigateur : migration d'une photo existante, puis une photo de 6 Mo (4000×3000) retrouvée intacte après rechargement.
+
 ## [2.20.0] — 2026-11-06
 
 ### 🔗 Ajouté — Partager une photo étiquetée par lien

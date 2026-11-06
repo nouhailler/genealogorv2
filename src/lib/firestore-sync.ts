@@ -6,9 +6,11 @@ import {
   deleteDoc,
   getDocs,
   query,
-  where
+  where,
+  deleteField
 } from 'firebase/firestore';
 import { db, OperationType, handleFirestoreError } from './firebase';
+import { prepareArchiveForFirestore } from './archive-persistence';
 import { GenealogyData, ArchiveDocument, BranchAccess } from '../types/genealogy';
 import type { ShareDocument } from './share-snapshot';
 import { User } from 'firebase/auth';
@@ -73,8 +75,13 @@ export async function saveArchiveToFirestore(
   const path = `trees/${treeId}/archives/${archive.id}`;
   try {
     const archiveRef = doc(db, 'trees', treeId, 'archives', archive.id);
+    // Sans l'image si elle ferait dépasser la limite d'un document (elle reste sur l'appareil)
+    const prepared = prepareArchiveForFirestore(archive);
+    const imageWithheld = Boolean(archive.fileData) && !prepared.fileData;
     await setDoc(archiveRef, {
-      ...archive,
+      ...prepared,
+      // Une image plus ancienne déjà dans le cloud ne doit pas survivre à son remplacement
+      ...(imageWithheld ? { fileData: deleteField() } : {}),
       createdBy: currentUser.uid,
       updatedAt: Date.now(),
     }, { merge: true });

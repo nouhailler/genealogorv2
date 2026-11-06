@@ -67,7 +67,7 @@ Points qui conditionnent le texte et qu'il faudra revoir si l'application évolu
 - **Hors ligne** : aucun service worker n'est enregistré ; l'application ne démarre pas sans connexion.
   La page l'indique (section Installation, FAQ). Le README parle à tort de « fonctionnement hors-ligne garanti ».
 - **Installation PWA** : vérifiée avec Chromium 156 (`Page.getInstallabilityErrors` vide sur le site en ligne).
-- **Stockage** : `localStorage`, non chiffré au repos. L'accueil de l'application affiche
+- **Stockage** : `localStorage` pour les données, IndexedDB pour les images d'archives (depuis la v2.20.1), non chiffrés au repos. L'accueil de l'application affiche
   « Données stockées localement & chiffrement client », formulation à préciser (seuls les sauvegardes et
   les partages sont chiffrés).
 - **Firestore** : les règles autorisent aussi les administrateurs du service à lire les arbres ; la page le mentionne.

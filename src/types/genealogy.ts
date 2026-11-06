@@ -131,6 +131,8 @@ export interface ArchiveDocument {
   linkedFamilyIds: string[];
   linkedEventId?: string;
   photoTags?: PhotoTag[];    // Tags interactifs placés sur l'image
+  /** Image conservée localement dans IndexedDB (le localStorage n'en garde que les métadonnées) */
+  imageStored?: boolean;
   createdAt: number;
   updatedAt: number;
 }

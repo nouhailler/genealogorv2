@@ -3,7 +3,9 @@
  * génération d'identifiants (slugs) et utilitaires multi-arbres.
  */
 
-import { STORAGE_KEYS } from './storage-manager';
+import { STORAGE_KEYS, getVersionedItem } from './storage-manager';
+import { deleteArchiveImages } from './archive-persistence';
+import { ArchiveDocument } from '../types/genealogy';
 
 export interface KnownTree {
   id: string;
@@ -235,6 +237,12 @@ export async function deleteTreeCompletely(
   try {
     // 1. Nettoyer les clés de stockage locales dédiées à cet arbre
     //    (+ copies globales non partitionnées si c'est l'arbre actif)
+    // Images des archives de cet arbre (IndexedDB), avant d'effacer la liste qui les référence
+    try {
+      const archives = getVersionedItem<ArchiveDocument[]>(`${STORAGE_KEYS.ARCHIVES}_${treeId}`, []).data;
+      await deleteArchiveImages(archives.map(a => a.id));
+    } catch (e) {}
+
     const isCurrentTree = localStorage.getItem(STORAGE_KEY_CURRENT_ROOM) === treeId;
     const globalMirrors = isCurrentTree ? [STORAGE_KEYS.TREE, STORAGE_KEYS.ARCHIVES, STORAGE_KEYS.ACCESS] : [];
     for (const key of [...getTreeStorageKeys(treeId), ...globalMirrors]) {
