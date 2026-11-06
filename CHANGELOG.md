@@ -3,6 +3,13 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.24.0] — 2026-11-06
+
+### 🔎 Ajouté — Loupe sur la photo partagée
+- Page d'une photo partagée : bouton **« Loupe »**. Une loupe ronde suit la souris et grossit la zone survolée (×2, ×3 par défaut, ×4), au-dessus des repères, avec le point visé marqué au centre : on se promène sur la photo pour examiner chaque visage.
+- Sur téléphone ou tablette : on glisse le doigt sur la photo ; la loupe s'affiche au-dessus du doigt pour ne pas être masquée, et la page ne défile pas pendant ce temps.
+- Compatible avec « Proposer une identification » : la loupe aide à viser le bon visage avant de cliquer.
+
 ## [2.23.0] — 2026-11-06
 
 ### 📅 Ajouté — Proposer la date d'une photo partagée

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Calendar, CalendarPlus, MapPin, Eye, EyeOff, UserPlus, Send, Pencil, Trash2, CheckCircle2, X, Loader2 } from 'lucide-react';
+import { Calendar, CalendarPlus, MapPin, Eye, EyeOff, UserPlus, Send, Pencil, Trash2, CheckCircle2, X, Loader2, Search } from 'lucide-react';
 import { Logo } from './Logo';
 import { PhotoShareSnapshot, LIVING_PLACEHOLDER } from '../lib/photo-share';
 import { ProposalItem, ProposalSubmission, DateProposal, PROPOSAL_LIMITS } from '../lib/photo-proposals';
@@ -35,6 +35,23 @@ export const SharedPhotoView: React.FC<SharedPhotoViewProps> = ({ snapshot, onSu
   const [dateProposal, setDateProposal] = useState<DateProposal | null>(null);
   const [dateForm, setDateForm] = useState<DateProposal | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  // Loupe : suit la souris (ou le doigt, au-dessus de lui) et grossit la zone survolée
+  const [loupe, setLoupe] = useState(false);
+  const [loupeZoom, setLoupeZoom] = useState(3);
+  const [lens, setLens] = useState<{ x: number; y: number; w: number; h: number; touch: boolean } | null>(null);
+
+  const moveLens = (clientX: number, clientY: number, touch: boolean) => {
+    const img = imgRef.current;
+    if (!img) return;
+    const r = img.getBoundingClientRect();
+    const x = clientX - r.left;
+    const y = clientY - r.top;
+    if (x < 0 || y < 0 || x > r.width || y > r.height) {
+      setLens(null);
+      return;
+    }
+    setLens({ x, y, w: r.width, h: r.height, touch });
+  };
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -206,16 +223,92 @@ export const SharedPhotoView: React.FC<SharedPhotoViewProps> = ({ snapshot, onSu
           </div>
         )}
 
+        {/* Loupe */}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <button
+            type="button"
+            onClick={() => { setLoupe(v => !v); setLens(null); }}
+            aria-pressed={loupe}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 font-semibold rounded-lg border shadow-sm cursor-pointer ${
+              loupe
+                ? 'bg-stone-800 text-white border-stone-800'
+                : 'bg-white dark:bg-[#1A1D24] text-stone-700 dark:text-stone-200 border-stone-300 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800'
+            }`}
+          >
+            <Search className="w-3.5 h-3.5" />
+            {loupe ? 'Loupe activée' : 'Loupe'}
+          </button>
+          {loupe && (
+            <>
+              <div className="flex items-center gap-0.5 bg-white dark:bg-[#1A1D24] p-0.5 rounded-lg border border-stone-200 dark:border-stone-700" role="group" aria-label="Grossissement de la loupe">
+                {[2, 3, 4].map(z => (
+                  <button
+                    key={z}
+                    type="button"
+                    onClick={() => setLoupeZoom(z)}
+                    aria-pressed={loupeZoom === z}
+                    className={`px-2 py-0.5 rounded-md font-semibold cursor-pointer ${loupeZoom === z ? 'bg-stone-800 text-white' : 'text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}
+                  >
+                    ×{z}
+                  </button>
+                ))}
+              </div>
+              <span className="text-stone-600 dark:text-stone-400">
+                Promenez la souris sur la photo (sur téléphone : glissez le doigt).
+              </span>
+            </>
+          )}
+        </div>
+
         <div className="bg-stone-900 rounded-2xl p-2 sm:p-3 flex justify-center">
-          <div className="relative inline-block max-w-full">
+          <div
+            className="relative inline-block max-w-full"
+            onMouseMove={loupe ? e => moveLens(e.clientX, e.clientY, false) : undefined}
+            onMouseLeave={loupe ? () => setLens(null) : undefined}
+            onTouchStart={loupe ? e => moveLens(e.touches[0].clientX, e.touches[0].clientY, true) : undefined}
+            onTouchMove={loupe ? e => moveLens(e.touches[0].clientX, e.touches[0].clientY, true) : undefined}
+            onTouchEnd={loupe ? () => setLens(null) : undefined}
+          >
             <img
               ref={imgRef}
               src={image}
               alt={title}
               onClick={handleImageClick}
-              className={`block max-w-full max-h-[75vh] w-auto h-auto rounded-lg select-none ${proposing ? 'cursor-crosshair ring-2 ring-amber-500' : ''}`}
+              style={loupe ? { touchAction: 'none' } : undefined}
+              className={`block max-w-full max-h-[75vh] w-auto h-auto rounded-lg select-none ${proposing ? 'cursor-crosshair ring-2 ring-amber-500' : loupe ? 'cursor-none' : ''}`}
               draggable={false}
             />
+            {/* Loupe : la zone survolée, grossie, au-dessus des repères */}
+            {loupe && lens && (() => {
+              const size = lens.touch ? 150 : 190;
+              const left = Math.min(Math.max(lens.x - size / 2, -size / 4), lens.w - (3 * size) / 4);
+              const top = lens.touch ? lens.y - size - 24 : lens.y - size / 2;
+              // Souris : la loupe est posée sur le curseur. Doigt : elle est au-dessus, le point visé au centre.
+              const targetX = lens.touch ? size / 2 : lens.x - left;
+              const targetY = lens.touch ? size / 2 : lens.y - top;
+              return (
+                <div
+                  aria-hidden="true"
+                  className="absolute z-40 rounded-full border-4 border-white shadow-2xl pointer-events-none bg-no-repeat"
+                  style={{
+                    width: size,
+                    height: size,
+                    left,
+                    top,
+                    backgroundImage: `url("${image}")`,
+                    backgroundSize: `${lens.w * loupeZoom}px ${lens.h * loupeZoom}px`,
+                    backgroundPosition: `${targetX - lens.x * loupeZoom}px ${targetY - lens.y * loupeZoom}px`,
+                    backgroundColor: '#1c1917',
+                  }}
+                >
+                  {/* Point visé */}
+                  <span
+                    className="absolute w-2 h-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/80 bg-amber-500/60"
+                    style={{ left: targetX, top: targetY }}
+                  />
+                </div>
+              );
+            })()}
             {showPins && tags.map(tag => {
               const active = activeN === tag.n;
               return (
