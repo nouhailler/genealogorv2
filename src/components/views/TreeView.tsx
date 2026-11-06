@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Users, User, ChevronRight, ChevronDown, Award, 
   MapPin, Calendar, FileText, Search, ZoomIn, ZoomOut, RotateCcw,
-  Sparkles, ShieldCheck, UserPlus, Upload, GitFork, FolderTree
+  Sparkles, ShieldCheck, UserPlus, Upload, GitFork, FolderTree, IdCard
 } from 'lucide-react';
 import { GenealogyData, Individual } from '../../types/genealogy';
 import { computeSosaNumbers } from '../../lib/sosa-aboville';
@@ -402,13 +402,26 @@ export const TreeView: React.FC<TreeViewProps> = ({
         
         {/* Selected focal individual */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-900 font-serif font-bold text-lg flex items-center justify-center shrink-0">
+          <button
+            type="button"
+            onClick={() => onViewProfile(currentPerson.id)}
+            title={`Ouvrir la fiche de ${currentPerson.name}`}
+            aria-label={`Ouvrir la fiche de ${currentPerson.name}`}
+            className="w-10 h-10 rounded-full bg-amber-100 text-amber-900 font-serif font-bold text-lg flex items-center justify-center shrink-0 hover:ring-2 hover:ring-amber-400 transition-shadow cursor-pointer"
+          >
             {currentPerson.givenName?.[0] || currentPerson.name[0]}
-          </div>
+          </button>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-serif text-lg font-bold text-stone-900 dark:text-stone-100">
-                {currentPerson.name}
+                <button
+                  type="button"
+                  onClick={() => onViewProfile(currentPerson.id)}
+                  title={`Ouvrir la fiche de ${currentPerson.name}`}
+                  className="hover:underline decoration-amber-700/60 underline-offset-4 cursor-pointer text-left"
+                >
+                  {currentPerson.name}
+                </button>
               </h2>
               {sosaMap[currentPerson.id] && (
                 <div className="flex items-center gap-1">
@@ -418,6 +431,14 @@ export const TreeView: React.FC<TreeViewProps> = ({
                   <InfoTooltip content="Numérotation Sosa-Stradonitz : 1 est le de cujus (racine de référence de l'arbre), les pères ont des numéros pairs et les mères des numéros impairs." />
                 </div>
               )}
+              <button
+                type="button"
+                onClick={() => onViewProfile(currentPerson.id)}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border border-amber-300/80 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors cursor-pointer"
+              >
+                <IdCard className="w-3.5 h-3.5" />
+                Ouvrir la fiche
+              </button>
             </div>
             <p className="text-xs text-stone-500 dark:text-stone-400">
               {isCurrentRoot ? 'Racine de l\'arbre (de cujus)' : 'Personne pivot de l\'affichage'} · {currentPerson.birth?.date || 'Date inconnue'} {currentPerson.birth?.place ? `à ${currentPerson.birth.place.split(',')[0]}` : ''}

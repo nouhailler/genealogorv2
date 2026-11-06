@@ -3,6 +3,12 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.19.4] — 2026-11-06
+
+### 🪪 Ajouté — Ouvrir la fiche depuis le cadre de l'arbre
+- Vue Arbre : dans le cadre de la personne affichée (racine ou personne pivot), un bouton « Ouvrir la fiche » ouvre directement sa fiche individuelle.
+- Le nom et l'initiale de la personne sont aussi cliquables et ouvrent la fiche.
+
 ## [2.19.3] — 2026-11-06
 
 ### 🏷️ Corrigé — Photos : bouton « Enregistrer le tag » caché
