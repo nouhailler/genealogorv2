@@ -3,6 +3,16 @@
 Toutes les modifications notables apportées au projet **Genealogor** sont consignées dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/), et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.25.0] — 2026-11-07
+
+### 🖼️ Ajouté — Cadrer les visages et portraits des personnes
+- **Cadre du visage** : en mode marquage, glisser sur la photo dessine un rectangle autour du visage, puis ouvre la fiche d'identification (un simple clic pose toujours un repère sans cadre). Fonctionne avec le zoom et la rotation de la vue, à la souris comme au doigt.
+- **Recadrer** un repère existant : « Cadrer le visage » (liste des personnes identifiées ou fiche du repère), « Redessiner le cadre », « Retirer le cadre ».
+- Sur la photo, le cadre est tracé en trait fin et le numéro du repère se place sous le cadre pour ne pas couvrir le visage ; la liste des personnes identifiées montre la vignette du visage.
+- **Portrait** : « Utiliser comme portrait » sur un visage cadré ; le premier visage cadré d'une personne sans portrait le devient automatiquement. Le portrait remplace l'initiale dans l'en-tête de la fiche, le cadre de la personne en haut de l'arbre et les cartes de l'arbre.
+- Le portrait est une référence (photo + cadre), pas une copie : il ne pèse rien, suit les modifications du cadre et revient à l'initiale si la photo ou le repère disparaissent. Vignettes découpées une fois et gardées en mémoire. Inclus dans la sauvegarde complète ; l'export GEDZIP transmet la taille du cadre (zone `CROP`).
+- Tests `portrait.test.ts` ; vérifié dans l'application (dessin, portrait automatique, recadrage, affichage dans la fiche et l'arbre, conservation après rechargement).
+
 ## [2.24.2] — 2026-11-06
 
 ### 📤 Modifié — Zone d'envoi des propositions sous les boutons

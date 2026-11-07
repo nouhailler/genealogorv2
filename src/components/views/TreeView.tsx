@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { GenealogyData, Individual } from '../../types/genealogy';
 import { computeSosaNumbers } from '../../lib/sosa-aboville';
+import { PersonPortrait } from '../PersonPortrait';
 import { InfoTooltip } from '../InfoTooltip';
 import { TreeSiblingCarousel } from './TreeSiblingCarousel';
 import { FamilyLinksPanel } from './FamilyLinksPanel';
@@ -254,10 +255,19 @@ export const TreeView: React.FC<TreeViewProps> = ({
           )}
         </div>
 
-        {/* Name */}
-        <h4 className="font-serif text-sm font-bold text-stone-900 group-hover:text-amber-900 transition-colors line-clamp-1">
-          {person.name}
-        </h4>
+        {/* Name (avec le portrait s'il existe) */}
+        <div className="flex items-center gap-2">
+          {person.portrait && (
+            <PersonPortrait
+              person={person}
+              resolution={96}
+              className="w-8 h-8 rounded-full bg-stone-100 text-stone-500 text-xs font-serif font-bold flex items-center justify-center shrink-0 border border-stone-200"
+            />
+          )}
+          <h4 className="font-serif text-sm font-bold text-stone-900 group-hover:text-amber-900 transition-colors line-clamp-1 min-w-0">
+            {person.name}
+          </h4>
+        </div>
 
         {/* Dates & places */}
         <div className="mt-1.5 space-y-0.5 text-[11px] text-stone-600">
@@ -407,9 +417,12 @@ export const TreeView: React.FC<TreeViewProps> = ({
             onClick={() => onViewProfile(currentPerson.id)}
             title={`Ouvrir la fiche de ${currentPerson.name}`}
             aria-label={`Ouvrir la fiche de ${currentPerson.name}`}
-            className="w-10 h-10 rounded-full bg-amber-100 text-amber-900 font-serif font-bold text-lg flex items-center justify-center shrink-0 hover:ring-2 hover:ring-amber-400 transition-shadow cursor-pointer"
+            className="shrink-0 rounded-full hover:ring-2 hover:ring-amber-400 transition-shadow cursor-pointer"
           >
-            {currentPerson.givenName?.[0] || currentPerson.name[0]}
+            <PersonPortrait
+              person={currentPerson}
+              className="w-10 h-10 rounded-full bg-amber-100 text-amber-900 font-serif font-bold text-lg flex items-center justify-center"
+            />
           </button>
           <div>
             <div className="flex items-center gap-2 flex-wrap">

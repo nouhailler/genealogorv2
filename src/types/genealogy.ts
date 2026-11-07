@@ -51,7 +51,15 @@ export interface Individual {
   generation?: number;
   citations?: SourceCitation[];
   media?: Array<{ title?: string; file?: string; format?: string }>;
+  /** Portrait : visage cadré sur une photo d'archive (référence, découpé à l'affichage) */
+  portrait?: PortraitRef;
   _unsupportedTags?: Array<{ tag: string; value: string; level: number }>;
+}
+
+/** Référence au cadre d'un visage sur une photo : `archives[archiveId].photoTags[tagId]` (avec largeur et hauteur) */
+export interface PortraitRef {
+  archiveId: string;
+  tagId: string;
 }
 
 export interface Family {

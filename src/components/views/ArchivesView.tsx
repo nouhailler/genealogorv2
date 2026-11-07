@@ -22,6 +22,8 @@ interface ArchivesViewProps {
   onUpdateArchive?: (doc: ArchiveDocument) => void;
   onDeleteArchive?: (id: string) => void;
   onSelectPerson: (personId: string) => void;
+  /** Portrait d'une personne à partir d'un visage cadré (créateur uniquement) */
+  onSetPortrait?: (archiveId: string, personId: string, tagId: string | null) => void;
   /** Partage d'une photo étiquetée par lien (créateur uniquement) */
   photoShare?: PhotoShareControls;
   /** Propositions d'identification reçues des visiteurs des liens photo (créateur uniquement) */
@@ -58,6 +60,7 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
   onSelectPerson,
   photoShare,
   proposals,
+  onSetPortrait,
 }) => {
   const [isPhotoShareOpen, setIsPhotoShareOpen] = useState(false);
   // Photos dont des propositions ont été traitées : le panneau reste affiché pour proposer de mettre à jour le lien
@@ -728,6 +731,8 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
                     data={data}
                     onUpdateTags={handleUpdateDocumentTags}
                     onSelectPerson={onSelectPerson}
+                    readOnly={!onUpdateArchive}
+                    onSetPortrait={onSetPortrait ? (personId, tagId) => onSetPortrait(selectedDoc.id, personId, tagId) : undefined}
                   />
                 ) : (
                   /* Default Historic Archival Certificate Rendering */

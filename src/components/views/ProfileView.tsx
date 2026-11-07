@@ -1,3 +1,4 @@
+import { PersonPortrait } from '../PersonPortrait';
 import { 
   User, Calendar, MapPin, Briefcase, FileText, Heart, 
   Users, Edit3, ArrowLeft, BookOpen, Shield, Award,
@@ -138,9 +139,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         <div className="absolute top-0 right-0 w-48 h-48 bg-amber-50/50 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex items-start gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-amber-100/80 border border-amber-200/60 text-amber-950 font-serif text-2xl font-bold flex items-center justify-center shrink-0 shadow-2xs">
-            {person.givenName?.[0] || person.name[0]}
-          </div>
+          <PersonPortrait
+            person={person}
+            resolution={192}
+            className="w-16 h-16 rounded-2xl bg-amber-100/80 border border-amber-200/60 text-amber-950 font-serif text-2xl font-bold flex items-center justify-center shrink-0 shadow-2xs"
+          />
 
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">

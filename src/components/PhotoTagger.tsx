@@ -4,7 +4,8 @@ import {
   Eye, EyeOff, Check, Search, Sparkles, MapPin, Calendar,
   Shield, Info, ZoomIn, ZoomOut, RotateCw, Contrast
 } from 'lucide-react';
-import { Search as LoupeIcon } from 'lucide-react';
+import { Search as LoupeIcon, Crop, UserCircle2, CheckCircle2 } from 'lucide-react';
+import { boxFromCorners, hasFrame, portraitThumbnail } from '../lib/portrait';
 import { ArchiveDocument, GenealogyData, Individual, PhotoTag } from '../types/genealogy';
 
 interface PhotoTaggerProps {
@@ -13,7 +14,24 @@ interface PhotoTaggerProps {
   onUpdateTags: (tags: PhotoTag[]) => void;
   onSelectPerson: (personId: string) => void;
   readOnly?: boolean;
+  /** Définit (tagId) ou retire (null) le portrait d'une personne à partir d'un visage cadré de cette photo */
+  onSetPortrait?: (personId: string, tagId: string | null) => void;
 }
+
+/** Vignette d'un visage cadré (liste des personnes identifiées) */
+const FaceThumb: React.FC<{ src: string; tag: PhotoTag }> = ({ src, tag }) => {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    portraitThumbnail(src, { x: tag.x, y: tag.y, width: tag.width!, height: tag.height! }, 96)
+      .then(u => { if (!cancelled) setUrl(u); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [src, tag.x, tag.y, tag.width, tag.height]);
+  return url
+    ? <img src={url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 border border-stone-200" draggable={false} />
+    : <span className="w-10 h-10 rounded-lg bg-stone-200 shrink-0" />;
+};
 
 export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
   document,
@@ -21,6 +39,7 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
   onUpdateTags,
   onSelectPerson,
   readOnly = false,
+  onSetPortrait,
 }) => {
   const [isTaggingMode, setIsTaggingMode] = useState<boolean>(false);
   const [showTags, setShowTags] = useState<boolean>(true);
@@ -28,7 +47,11 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
   const [activeTagForEdit, setActiveTagForEdit] = useState<PhotoTag | null>(null);
 
   // New tag draft state
-  const [newTagPosition, setNewTagPosition] = useState<{ x: number; y: number } | null>(null);
+  const [newTagPosition, setNewTagPosition] = useState<{ x: number; y: number; width?: number; height?: number } | null>(null);
+  // Cadre du visage : dessin en cours (coins en %) et recadrage d'un repère existant
+  const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
+  const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number } | null>(null);
+  const [reframing, setReframing] = useState(false);
   const [selectedPersonId, setSelectedPersonId] = useState<string>('');
   const [tagLabel, setTagLabel] = useState<string>('');
   const [personSearch, setPersonSearch] = useState<string>('');
@@ -46,10 +69,10 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
   const [loupeZoom, setLoupeZoom] = useState(3);
   const [lens, setLens] = useState<{ x: number; y: number; w: number; h: number; touch: boolean } | null>(null);
 
-  /** Position du pointeur dans l'image non transformée (tient compte du zoom et de la rotation de la vue) */
-  const moveLens = (clientX: number, clientY: number, touch: boolean) => {
+  /** Position du pointeur dans l'image non transformée, en pixels (tient compte du zoom et de la rotation de la vue) */
+  const toLocal = (clientX: number, clientY: number) => {
     const img = imageRef.current;
-    if (!img) return;
+    if (!img) return null;
     const w = img.offsetWidth, h = img.offsetHeight;
     const r = img.getBoundingClientRect();
     const dx = (clientX - (r.left + r.width / 2)) / zoom;
@@ -57,11 +80,16 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
     const a = (-rotation * Math.PI) / 180;
     const x = dx * Math.cos(a) - dy * Math.sin(a) + w / 2;
     const y = dx * Math.sin(a) + dy * Math.cos(a) + h / 2;
-    if (x < 0 || y < 0 || x > w || y > h) {
+    return { x, y, w, h, pctX: (x / w) * 100, pctY: (y / h) * 100 };
+  };
+
+  const moveLens = (clientX: number, clientY: number, touch: boolean) => {
+    const p = toLocal(clientX, clientY);
+    if (!p || p.x < 0 || p.y < 0 || p.x > p.w || p.y > p.h) {
       setLens(null);
       return;
     }
-    setLens({ x, y, w, h, touch });
+    setLens({ x: p.x, y: p.y, w: p.w, h: p.h, touch });
   };
 
   const imageFilter = filterMode === 'contrast'
@@ -84,59 +112,131 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
     return name.includes(q) || occ.includes(q) || dates.includes(q);
   }).slice(0, 8); // limit results for speed and clean UI
 
-  // Handle clicking on image to create a tag
-  const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
-    if (!isTaggingMode || readOnly) return;
-
-    const img = imageRef.current;
-    if (!img) return;
-
-    const rect = img.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
-
-    // Convert to percentage (0 - 100)
-    const pctX = Math.round((clickX / rect.width) * 1000) / 10;
-    const pctY = Math.round((clickY / rect.height) * 1000) / 10;
-
-    // Constrain to 0-100%
-    const clampedX = Math.max(2, Math.min(98, pctX));
-    const clampedY = Math.max(2, Math.min(98, pctY));
-
-    setNewTagPosition({ x: clampedX, y: clampedY });
-    setActiveTagForEdit(null);
+  // Marquage : un clic pose un repère, un glisser encadre le visage
+  const openDraft = (pos: { x: number; y: number; width?: number; height?: number }) => {
+    if (activeTagForEdit) {
+      // Recadrage d'un repère existant : seule la géométrie change, la fiche reste ouverte
+      setNewTagPosition(pos);
+      setReframing(false);
+      return;
+    }
+    setNewTagPosition(pos);
     setTagLabel('');
     setPersonSearch('');
-    // Default selected person: first linked person or first in tree
+    // Personne proposée par défaut : première personne liée pas encore identifiée, sinon la première de l'arbre
     const defaultP = document.linkedPersonIds?.find(id => !tags.some(t => t.personId === id)) || Object.keys(data.individuals)[0] || '';
     setSelectedPersonId(defaultP);
   };
 
+  const handlePointerDown = (e: React.PointerEvent<HTMLImageElement>) => {
+    if ((!isTaggingMode && !reframing) || readOnly || e.button !== 0) return;
+    // Pendant la modification d'un repère, la photo ne sert qu'à redessiner son cadre (si demandé)
+    if (activeTagForEdit && !reframing) return;
+    const p = toLocal(e.clientX, e.clientY);
+    if (!p) return;
+    e.preventDefault();
+    drawRef.current = { start: { x: p.pctX, y: p.pctY }, current: { x: p.pctX, y: p.pctY } };
+    attachDrawListeners();
+    setDrawStart({ x: p.pctX, y: p.pctY });
+    setDrawCurrent({ x: p.pctX, y: p.pctY });
+  };
+
+  // Pendant le dessin, déplacement et relâchement sont suivis sur toute la fenêtre : le geste se termine
+  // même si l'on relâche hors de la photo ou si l'image ne reçoit pas l'événement
+  const drawRef = useRef<{ start: { x: number; y: number }; current: { x: number; y: number } } | null>(null);
+  const finishDrawRef = useRef<(clientX?: number, clientY?: number) => void>(() => {});
+  finishDrawRef.current = (clientX?: number, clientY?: number) => {
+    const d = drawRef.current;
+    if (!d) return;
+    drawRef.current = null;
+    const p = clientX !== undefined && clientY !== undefined ? toLocal(clientX, clientY) : null;
+    const end = p ? { x: p.pctX, y: p.pctY } : d.current;
+    const box = boxFromCorners(d.start.x, d.start.y, end.x, end.y);
+    setDrawStart(null);
+    setDrawCurrent(null);
+    if (box.width >= 1.5 && box.height >= 1.5) {
+      openDraft(box);
+    } else if (!reframing) {
+      // Simple clic : repère sans cadre (comportement d'origine)
+      openDraft({ x: Math.max(2, Math.min(98, Math.round(box.x * 10) / 10)), y: Math.max(2, Math.min(98, Math.round(box.y * 10) / 10)) });
+    }
+  };
+  const moveDrawRef = useRef<(clientX: number, clientY: number) => void>(() => {});
+  moveDrawRef.current = (clientX: number, clientY: number) => {
+    const d = drawRef.current;
+    if (!d) return;
+    const p = toLocal(clientX, clientY);
+    if (!p) return;
+    d.current = { x: p.pctX, y: p.pctY };
+    setDrawCurrent(d.current);
+  };
+
+  // Écouteurs posés dès l'appui (et non après le rendu) : un geste très rapide n'est pas perdu
+  const detachDrawListenersRef = useRef<(() => void) | null>(null);
+  const attachDrawListeners = () => {
+    detachDrawListenersRef.current?.();
+    const onMove = (e: PointerEvent) => moveDrawRef.current(e.clientX, e.clientY);
+    const onUp = (e: PointerEvent | MouseEvent) => { detach(); finishDrawRef.current(e.clientX, e.clientY); };
+    const onCancel = () => { detach(); drawRef.current = null; setDrawStart(null); setDrawCurrent(null); };
+    const detach = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      detachDrawListenersRef.current = null;
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+    detachDrawListenersRef.current = detach;
+  };
+  useEffect(() => () => detachDrawListenersRef.current?.(), []);
+
+
   const handleSaveTag = () => {
     if (!selectedPersonId) return;
 
+    const geometry = newTagPosition
+      ? { x: newTagPosition.x, y: newTagPosition.y, width: newTagPosition.width, height: newTagPosition.height }
+      : null;
+    let savedTag: PhotoTag | null = null;
     if (activeTagForEdit) {
-      // Editing existing tag
-      const updated = tags.map(t => 
-        t.id === activeTagForEdit.id 
-          ? { ...t, personId: selectedPersonId, label: tagLabel.trim() || undefined }
-          : t
-      );
+      // Modification d'un repère : personne, précision et cadre éventuellement redessiné
+      const updated = tags.map(t => {
+        if (t.id !== activeTagForEdit.id) return t;
+        const { width, height, ...rest } = t;
+        savedTag = {
+          ...rest,
+          ...(geometry || { x: t.x, y: t.y, width, height }),
+          personId: selectedPersonId,
+          label: tagLabel.trim() || undefined,
+        };
+        if (!savedTag.width || !savedTag.height) { delete savedTag.width; delete savedTag.height; }
+        return savedTag;
+      });
       onUpdateTags(updated);
       setActiveTagForEdit(null);
-    } else if (newTagPosition) {
-      // Creating new tag
-      const newTag: PhotoTag = {
+      setNewTagPosition(null);
+    } else if (geometry) {
+      savedTag = {
         id: 'tag-' + Date.now(),
         personId: selectedPersonId,
-        x: newTagPosition.x,
-        y: newTagPosition.y,
+        x: geometry.x,
+        y: geometry.y,
+        ...(geometry.width && geometry.height ? { width: geometry.width, height: geometry.height } : {}),
         label: tagLabel.trim() || undefined,
         createdAt: Date.now(),
       };
-      onUpdateTags([...tags, newTag]);
+      onUpdateTags([...tags, savedTag]);
       setNewTagPosition(null);
     }
+    // Premier visage cadré d'une personne sans portrait : il devient son portrait
+    const saved = savedTag as PhotoTag | null;
+    if (saved && hasFrame(saved) && onSetPortrait && !data.individuals[saved.personId]?.portrait) {
+      onSetPortrait(saved.personId, saved.id);
+    }
+    setReframing(false);
     setPersonSearch('');
     setTagLabel('');
   };
@@ -156,7 +256,14 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
     setActiveTagForEdit(tag);
     setSelectedPersonId(tag.personId);
     setTagLabel(tag.label || '');
-    setNewTagPosition({ x: tag.x, y: tag.y });
+    setNewTagPosition({ x: tag.x, y: tag.y, width: tag.width, height: tag.height });
+    setReframing(false);
+  };
+
+  const closeForm = () => {
+    setNewTagPosition(null);
+    setActiveTagForEdit(null);
+    setReframing(false);
   };
 
   return (
@@ -231,7 +338,7 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
           {isTaggingMode && (
             <span className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md font-medium hidden sm:inline-flex items-center gap-1">
               <Sparkles className="w-3 h-3 text-amber-700" />
-              <span>Cliquez sur un visage ou une personne pour l'identifier</span>
+              <span>Cliquez sur un visage, ou glissez pour l'encadrer</span>
             </span>
           )}
         </div>
@@ -303,10 +410,11 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
             ref={imageRef}
             src={document.fileData}
             alt={document.title}
-            onClick={handleImageClick}
-            style={{ filter: imageFilter, ...(loupe ? { touchAction: 'none' } : {}) }}
+            onPointerDown={handlePointerDown}
+            draggable={false}
+            style={{ filter: imageFilter, ...(loupe || isTaggingMode || reframing ? { touchAction: 'none' } : {}) }}
             className={`max-h-[520px] w-auto object-contain rounded-lg shadow-2xl block transition-all ${
-              isTaggingMode ? 'cursor-crosshair ring-2 ring-amber-500' : loupe ? 'cursor-none' : 'cursor-default'
+              isTaggingMode || reframing ? 'cursor-crosshair ring-2 ring-amber-500' : loupe ? 'cursor-none' : 'cursor-default'
             }`}
           />
 
@@ -344,6 +452,28 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
             );
           })()}
 
+          {/* Cadre en cours de dessin */}
+          {drawStart && drawCurrent && (() => {
+            const b = boxFromCorners(drawStart.x, drawStart.y, drawCurrent.x, drawCurrent.y);
+            return (
+              <div
+                className="absolute z-30 border-2 border-dashed border-amber-400 bg-amber-300/10 rounded-sm pointer-events-none"
+                style={{ left: `${b.x - b.width / 2}%`, top: `${b.y - b.height / 2}%`, width: `${b.width}%`, height: `${b.height}%` }}
+              />
+            );
+          })()}
+
+          {/* Cadres des visages identifiés */}
+          {showTags && tags.map(tag => hasFrame(tag) && data.individuals[tag.personId] ? (
+            <div
+              key={`frame-${tag.id}`}
+              className={`absolute z-10 rounded-sm pointer-events-none transition-colors ${
+                hoveredTagId === tag.id || activeTagForEdit?.id === tag.id ? 'border-2 border-amber-400' : 'border border-white/60'
+              }`}
+              style={{ left: `${tag.x - tag.width! / 2}%`, top: `${tag.y - tag.height! / 2}%`, width: `${tag.width}%`, height: `${tag.height}%` }}
+            />
+          ) : null)}
+
           {/* Render Photo Tags Overlay */}
           {showTags && tags.map((tag, idx) => {
             const person = data.individuals[tag.personId];
@@ -351,15 +481,17 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
 
             const isHovered = hoveredTagId === tag.id;
             const isEditingThis = activeTagForEdit?.id === tag.id;
+            // Visage cadré : le numéro se place sous le cadre pour ne pas couvrir le visage
+            const pinY = hasFrame(tag) ? Math.min(98, tag.y + tag.height! / 2) : tag.y;
 
             return (
               <div
                 key={tag.id}
                 style={{
                   left: `${tag.x}%`,
-                  top: `${tag.y}%`,
+                  top: `${pinY}%`,
                 }}
-                className="absolute -translate-x-1/2 -translate-y-1/2 z-20 group"
+                className={`absolute -translate-x-1/2 ${hasFrame(tag) ? 'translate-y-1' : '-translate-y-1/2'} z-20 group`}
                 onMouseEnter={() => setHoveredTagId(tag.id)}
                 onMouseLeave={() => setHoveredTagId(null)}
               >
@@ -393,7 +525,7 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
                 {isHovered && !newTagPosition && (
                   <div 
                     // Sous le repère pour ne pas masquer le visage ; au-dessus près du bas (la zone photo coupe ce qui dépasse)
-                    className={`absolute ${tag.y > 65 ? 'bottom-full mb-3' : 'top-full mt-3'} ${
+                    className={`absolute ${pinY > 65 ? 'bottom-full mb-3' : 'top-full mt-3'} ${
                       tag.x < 20 ? 'left-0' : tag.x > 80 ? 'right-0' : 'left-1/2 -translate-x-1/2'
                     } w-64 bg-[#FBF9F5] text-stone-900 rounded-xl p-3 shadow-2xl border border-amber-800/20 z-40 text-left pointer-events-auto animate-in fade-in zoom-in-95 duration-150`}
                   >
@@ -453,8 +585,21 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
             );
           })}
 
+          {/* Cadre du brouillon (nouveau repère ou recadrage) */}
+          {newTagPosition?.width && newTagPosition.height && !drawStart ? (
+            <div
+              className="absolute z-40 border-2 border-amber-500 bg-amber-300/10 rounded-sm pointer-events-none"
+              style={{
+                left: `${newTagPosition.x - newTagPosition.width / 2}%`,
+                top: `${newTagPosition.y - newTagPosition.height / 2}%`,
+                width: `${newTagPosition.width}%`,
+                height: `${newTagPosition.height}%`,
+              }}
+            />
+          ) : null}
+
           {/* New Tag Draft Pin & Inline Form Popover */}
-          {newTagPosition && (
+          {newTagPosition && !newTagPosition.width && (
             <div
               style={{
                 left: `${newTagPosition.x}%`,
@@ -483,10 +628,7 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
                 <span>{activeTagForEdit ? 'Modifier le tag' : 'Identifier une personne'}</span>
               </div>
               <button
-                onClick={() => {
-                  setNewTagPosition(null);
-                  setActiveTagForEdit(null);
-                }}
+                onClick={closeForm}
                 className="text-stone-400 hover:text-stone-700"
               >
                 <X className="w-4 h-4" />
@@ -553,14 +695,45 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
                 />
               </div>
 
+              {/* Cadre du visage */}
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                {newTagPosition?.width ? (
+                  <span className="inline-flex items-center gap-1 text-emerald-800"><Crop className="w-3 h-3" /> Visage cadré</span>
+                ) : (
+                  <span className="text-stone-500">Astuce : glissez sur la photo pour encadrer le visage (portrait).</span>
+                )}
+                {activeTagForEdit && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setReframing(true)}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border ${reframing ? 'border-amber-500 bg-amber-50 text-amber-900' : 'border-stone-200 text-stone-700 hover:bg-stone-50'}`}
+                    >
+                      <Crop className="w-3 h-3" /> {newTagPosition?.width ? 'Redessiner le cadre' : 'Cadrer le visage'}
+                    </button>
+                    {newTagPosition?.width ? (
+                      <button
+                        type="button"
+                        onClick={() => setNewTagPosition(pos => pos && { x: pos.x, y: pos.y })}
+                        className="text-stone-500 hover:text-rose-700 hover:underline"
+                      >
+                        Retirer le cadre
+                      </button>
+                    ) : null}
+                  </>
+                )}
+              </div>
+              {reframing && (
+                <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
+                  Dessinez un rectangle autour du visage sur la photo.
+                </p>
+              )}
+
               {/* Actions */}
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
                 <button
                   type="button"
-                  onClick={() => {
-                    setNewTagPosition(null);
-                    setActiveTagForEdit(null);
-                  }}
+                  onClick={closeForm}
                   className="px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-100 rounded-lg"
                 >
                   Annuler
@@ -620,7 +793,7 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-2.5">
             {tags.map((tag, idx) => {
               const person = data.individuals[tag.personId];
               if (!person) return null;
@@ -638,9 +811,19 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
                   }`}
                 >
                   <div className="flex items-start gap-2 min-w-0">
-                    <span className="w-5 h-5 rounded-full bg-amber-900 text-white font-mono text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
-                      {idx + 1}
-                    </span>
+                    {hasFrame(tag) && document.fileData ? (
+                      // Visage cadré : sa vignette, avec le numéro du repère en pastille
+                      <span className="relative shrink-0">
+                        <FaceThumb src={document.fileData} tag={tag} />
+                        <span className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-amber-900 text-white font-mono text-[9px] font-bold flex items-center justify-center ring-2 ring-white">
+                          {idx + 1}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="w-5 h-5 rounded-full bg-amber-900 text-white font-mono text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                        {idx + 1}
+                      </span>
+                    )}
 
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
@@ -667,6 +850,37 @@ export const PhotoTagger: React.FC<PhotoTaggerProps> = ({
                         <User className="w-2.5 h-2.5" />
                         <span>Ouvrir sa fiche →</span>
                       </button>
+                      {hasFrame(tag) && onSetPortrait && !readOnly && (
+                        person.portrait?.archiveId === document.id && person.portrait.tagId === tag.id ? (
+                          <span className="mt-1 text-[10px] text-emerald-800 font-semibold flex items-center gap-1 whitespace-nowrap">
+                            <CheckCircle2 className="w-2.5 h-2.5" /> Portrait de la fiche
+                            <button
+                              onClick={() => onSetPortrait(person.id, null)}
+                              className="ml-1 font-normal text-stone-500 hover:text-rose-700 hover:underline"
+                              title="Ne plus utiliser ce visage comme portrait"
+                            >
+                              retirer
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => onSetPortrait(person.id, tag.id)}
+                            className="mt-1 text-[10px] text-stone-600 hover:text-amber-900 hover:underline font-semibold flex items-center gap-1"
+                          >
+                            <UserCircle2 className="w-2.5 h-2.5" />
+                            <span>Utiliser comme portrait</span>
+                          </button>
+                        )
+                      )}
+                      {!hasFrame(tag) && !readOnly && (
+                        <button
+                          onClick={(e) => { handleStartEditTag(tag, e); setReframing(true); imageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}
+                          className="mt-1 text-[10px] text-stone-500 hover:text-amber-900 hover:underline flex items-center gap-1"
+                        >
+                          <Crop className="w-2.5 h-2.5" />
+                          <span>Cadrer le visage</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 

@@ -164,6 +164,8 @@ Pour les utilisateurs novices ou nomades explorant les fonds d'archives départe
 </div>
 
 - **Repérage spatial sur les portraits** : Cliquez sur un visage pour placer un repère visuel.
+- **Cadrer le visage** : en mode marquage, glissez sur la photo pour dessiner un rectangle autour du visage (un simple clic pose toujours un repère sans cadre). Un repère existant peut être cadré après coup (« Cadrer le visage »). Le numéro se place sous le cadre.
+- **Portraits** : un visage cadré peut devenir le portrait de la personne (« Utiliser comme portrait » ; le premier visage cadré d'une personne sans portrait le devient automatiquement). Le portrait remplace l'initiale dans l'en-tête de la fiche, le cadre de la personne affichée en haut de l'arbre et les cartes de l'arbre. C'est une référence au cadre, pas une copie : il suit les modifications du cadre et revient à l'initiale si la photo est supprimée.
 - **Liaison instantanée avec l'arbre** : Recherche prédictive pour relier le visage à une fiche individuelle existante.
 - **Section dédiée sur la fiche individu** : La fiche biographique récapitule tous les clichés d'archives où la personne est identifiée.
 - **Filtres paléographiques** : Contraste élevé, négatif, niveaux de gris et convertisseur républicain (An II – An XIV).

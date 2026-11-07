@@ -55,6 +55,7 @@ import {
   upsertPhotoShareRecord,
 } from './lib/photo-share';
 import { SharedPhotoView } from './components/SharedPhotoView';
+import { PortraitProvider } from './components/PersonPortrait';
 import { sealSubmission, openSubmission, flattenSubmission, dateFromSubmission, withoutItems, newProposalId, ReceivedProposalItem, ReceivedDateProposal } from './lib/photo-proposals';
 import { FanChartView } from './components/views/FanChartView';
 import { DescendantsView } from './components/views/DescendantsView';
@@ -1231,6 +1232,17 @@ export default function App() {
     showToast('Lien de la photo révoqué.');
   };
 
+  /** Portrait d'une personne : visage cadré d'une photo (tagId) ou retrait (null) ; la sélection en cours est conservée */
+  const handleSetPortrait = async (archiveId: string, personId: string, tagId: string | null) => {
+    const person = data.individuals[personId];
+    if (!person) return;
+    const { portrait, ...rest } = person;
+    const keepSelection = selectedPersonId;
+    await handleUpdatePerson(tagId ? { ...rest, portrait: { archiveId, tagId } } : rest);
+    setSelectedPersonId(keepSelection);
+    showToast(tagId ? `Portrait de ${person.name} mis à jour.` : `Portrait de ${person.name} retiré.`);
+  };
+
   const handleLoadGedcom = async (newData: GenealogyData) => {
     if (userRole !== 'admin') {
       showToast("Action refusée : L'importation GEDCOM est réservée au profil créateur.");
@@ -1632,6 +1644,7 @@ export default function App() {
   }
 
   return (
+    <PortraitProvider archives={effectiveArchives}>
     <div className="min-h-screen bg-[#FBF9F5] dark:bg-[#121418] text-stone-900 dark:text-stone-100 flex flex-col font-sans transition-colors duration-200">
       
       {/* Barre de navigation et alertes, épinglées ensemble en haut de l'écran */}
@@ -1856,6 +1869,7 @@ export default function App() {
               onResolve: handleResolveProposal,
               onResolvePending: handleResolvePendingIdentification,
             } : undefined}
+            onSetPortrait={userRole === 'admin' && !isSharedView ? handleSetPortrait : undefined}
             photoShare={userRole === 'admin' && !isSharedView ? {
               records: photoShareRecords,
               onPublish: handlePublishPhotoShare,
@@ -2136,5 +2150,6 @@ export default function App() {
       </footer>
 
     </div>
+    </PortraitProvider>
   );
 }
